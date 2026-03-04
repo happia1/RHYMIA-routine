@@ -1,0 +1,37 @@
+# 1. 의존성 및 빌드 결과물 (Node.js / Next.js)
+node_modules/
+.next/
+out/
+build/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 2. 파이썬 가상환경 및 캐시 (Python 에이전트 연동 시)
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 3. 🚨 환경 변수 및 보안 (가장 중요!) 🚨
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+*.key
+
+# 4. 운영체제 및 에디터 설정
+.DS_Store
+Thumbs.db
+.cursor/
+.vscode/
+.idea/
+
+# 5. 로컬 데이터 저장소 (테스트용 JSON 데이터 등)
+data/*.json
+!data/example.json
