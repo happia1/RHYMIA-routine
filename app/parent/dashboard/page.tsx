@@ -94,7 +94,7 @@ export default function ParentDashboardPage() {
                 selectedKidId === p.id ? 'border-pink-400 bg-pink-50' : 'border-gray-200'
               }`}
             >
-              <span className="text-xl">{CHARACTER_EMOJI[p.character] ?? '👶'}</span>
+              <span className="text-xl">{CHARACTER_EMOJI[p.character ?? 'penguin'] ?? '👶'}</span>
               <span className="font-medium">{p.name}</span>
             </button>
           ))}

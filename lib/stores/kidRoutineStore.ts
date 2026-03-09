@@ -1,351 +1,540 @@
 /**
- * kidRoutineStore.ts
- * 아이 프로필별 루틴·완료·포인트·캐릭터 상태.
- * profileId별로 분리 저장해 여러 자녀를 지원합니다.
+ * 아이(Kid) 루틴 전용 전역 상태 저장소 (프로필별 분리)
+ * 비개발자: 프로필마다 루틴·완료 기록·포인트가 따로 저장되고, 지금 선택된 프로필 것만 보여줍니다.
  */
 
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import {
-  RoutineTemplate,
-  RoutineItem,
-  VirtualCompanion,
-  RewardPoints,
-  POINT_EVENTS,
-} from '@/types/routine';
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+import { RoutineTemplate, RoutineLog, RewardPoints, POINT_RULES, type RoutineItem } from '@/types/routine'
+import { ALL_DEFAULT_KID_ROUTINES, ALL_DEFAULT_SCHOOL_KID_ROUTINES, ROUTINE_IMAGES, LABEL_TO_IMAGE_KEY } from '@/lib/utils/defaultRoutines'
+import type { ProfileRole } from '@/types/profile'
 
-/** 프로필 하나당 루틴 상태 */
-export interface KidProfileRoutineState {
-  routines: RoutineTemplate[];
-  completedItemIds: Record<string, string[]>;
-  points: RewardPoints;
-  companion: VirtualCompanion | null;
-  fullyCompletedToday: Record<string, boolean>;
+/** 탭 키 (프로필 기반 페이지에서 아침/저녁/주말 구분용) */
+export type RoutineTabType = 'morning' | 'evening' | 'weekend'
+
+/** 프로필 하나의 루틴 데이터 (프로필별로 따로 저장) */
+export interface ProfileRoutineData {
+  routines: RoutineTemplate[]
+  logs: RoutineLog[]
+  rewardPoints: RewardPoints
+  rewardShownDates: string[]
+  wakeAlarmTime: string
+  alarmEnabled: boolean
+  lastAlarmDismissedDate: string | null
 }
 
-const defaultProfileState = (profileId: string): KidProfileRoutineState => ({
-  routines: [],
-  completedItemIds: {},
-  points: {
-    userId: profileId,
-    totalPoints: 0,
-    streakDays: 0,
-    lastCompletedDate: null,
-  },
-  companion: null,
-  fullyCompletedToday: {},
-});
+/** 프로필별 훅이 반환하는 완료 현황 */
+export interface CompletedItemIdsByTab {
+  morning: string[]
+  evening: string[]
+  weekend: string[]
+}
 
+/** 프로필별 훅이 반환하는 포인트 정보 */
+export interface KidPoints {
+  totalPoints: number
+  streakDays: number
+}
+
+/** 프로필별 훅 반환 타입 */
+export interface UseKidRoutineForProfileReturn {
+  routines: RoutineTemplate[]
+  setRoutines: (templates: RoutineTemplate[]) => void
+  completedItemIds: CompletedItemIdsByTab
+  fullyCompletedToday: Record<RoutineTabType, boolean>
+  points: KidPoints
+  companion: import('@/types/routine').VirtualCompanion | null
+  setCompanion: (c: import('@/types/routine').VirtualCompanion | null) => void
+  completeItem: (routineId: string, itemId: string) => void
+}
+
+const defaultRewardPoints: RewardPoints = {
+  userId: 'local-kid',
+  totalPoints: 0,
+  streakDays: 0,
+  lastCompletedDate: null,
+}
+
+function defaultProfileData(): ProfileRoutineData {
+  return {
+    routines: [],
+    logs: [],
+    rewardPoints: { ...defaultRewardPoints },
+    rewardShownDates: [],
+    wakeAlarmTime: '07:00',
+    alarmEnabled: true,
+    lastAlarmDismissedDate: null,
+  }
+}
+
+/** 아이 루틴 상태 (프로필별 데이터 + 현재 프로필 + 세션) */
 interface KidRoutineState {
-  /** profileId → 해당 아이의 루틴 상태 */
-  byProfile: Record<string, KidProfileRoutineState>;
+  currentProfileId: string | null
+  byProfile: Record<string, ProfileRoutineData>
+  activeRoutineId: string | null
+  sessionCompletedItems: string[]
+  pendingConfirmItems: string[]
 
-  getState: (profileId: string) => KidProfileRoutineState;
-  ensureProfile: (profileId: string) => void;
-  setRoutines: (profileId: string, routines: RoutineTemplate[]) => void;
-  completeItem: (profileId: string, routineId: string, itemId: string) => void;
-  uncompleteItem: (profileId: string, routineId: string, itemId: string) => void;
-  completeRoutine: (profileId: string, routineId: string) => void;
-  addRoutineItem: (profileId: string, routineId: string, item: RoutineItem) => void;
-  removeRoutineItem: (profileId: string, routineId: string, itemId: string) => void;
-  reorderItems: (profileId: string, routineId: string, items: RoutineItem[]) => void;
-  setCompanion: (profileId: string, companion: VirtualCompanion) => void;
-  feedCompanion: (profileId: string, amount: number) => void;
-  addPoints: (profileId: string, amount: number) => void;
-  resetDailyProgress: (profileId: string) => void;
+  setCurrentProfileId: (id: string | null) => void
+  /** 역할 없으면 미취학 기본 루틴, child_school이면 학령기 기본 루틴 사용 */
+  initRoutines: (role?: ProfileRole) => void
+  setActiveRoutine: (routineId: string) => void
+  completeItem: (itemId: string) => void
+  completeItemForRoutine: (routineId: string, itemId: string) => void
+  setRoutines: (templates: RoutineTemplate[], forProfileId?: string) => void
+  requestConfirm: (itemId: string) => void
+  parentApprove: (itemId: string) => void
+  parentApproveForRoutine: (routineId: string, itemId: string) => void
+  parentReject: (itemId: string) => void
+  resetSession: () => void
+  markRewardShown: (routineId: string) => void
+  hasShownReward: (routineId: string) => boolean
+  confirmRoutineComplete: () => void
+  addPoints: (points: number) => void
+  getTodayLog: (routineId: string) => RoutineLog | undefined
+  getTodayLogForProfile: (profileId: string, routineId: string) => RoutineLog | undefined
+  getActiveRoutine: () => RoutineTemplate | undefined
+  getCompletionRate: (routineId: string) => number
+  getCompletionRateForProfile: (profileId: string, routineId: string) => number
+  applyTimerSettings: (timers: Record<string, number>) => void
+  checkAndReset: () => void
+  setWakeAlarmTime: (time: string) => void
+  setAlarmEnabled: (enabled: boolean) => void
+  dismissAlarm: () => void
+}
+
+const today = () => new Date().toISOString().split('T')[0]
+
+function patchItemImage(item: RoutineItem): RoutineItem {
+  const trimLabel = item.label?.trim() ?? ''
+  const keyFromLabel = trimLabel ? LABEL_TO_IMAGE_KEY[trimLabel] : undefined
+  const imageKey = keyFromLabel ?? item.imageKey
+  const imagePath = imageKey ? (ROUTINE_IMAGES[imageKey] ?? null) : (item.imagePath ?? null)
+  return { ...item, imageKey, imagePath }
 }
 
 export const useKidRoutineStore = create<KidRoutineState>()(
   persist(
     (set, get) => {
-      const ensureProfile = (profileId: string) => {
-        const { byProfile } = get();
-        if (byProfile[profileId]) return;
-        set({
-          byProfile: { ...byProfile, [profileId]: defaultProfileState(profileId) },
-        });
-      };
+      function getProfileData(): ProfileRoutineData | null {
+        const pid = get().currentProfileId
+        if (!pid) return null
+        const by = get().byProfile
+        if (!by[pid]) return defaultProfileData()
+        return by[pid]
+      }
+
+      function setProfileData(updater: (prev: ProfileRoutineData) => ProfileRoutineData) {
+        const pid = get().currentProfileId
+        if (!pid) return
+        const by = { ...get().byProfile }
+        by[pid] = updater(by[pid] ?? defaultProfileData())
+        set({ byProfile: by })
+      }
 
       return {
+        currentProfileId: null,
         byProfile: {},
+        activeRoutineId: null,
+        sessionCompletedItems: [],
+        pendingConfirmItems: [],
 
-        getState: (profileId) => {
-          ensureProfile(profileId);
-          return get().byProfile[profileId] ?? defaultProfileState(profileId);
+        setCurrentProfileId: (id) => {
+          set({
+            currentProfileId: id,
+            activeRoutineId: null,
+            sessionCompletedItems: [],
+            pendingConfirmItems: [],
+          })
         },
 
-        ensureProfile,
-
-        setRoutines: (profileId, routines) => {
-          ensureProfile(profileId);
-          set((state) => ({
-            byProfile: {
-              ...state.byProfile,
-              [profileId]: { ...state.byProfile[profileId], routines },
-            },
-          }));
+        setWakeAlarmTime: (time) => {
+          setProfileData((p) => ({ ...p, wakeAlarmTime: time }))
+        },
+        setAlarmEnabled: (enabled) => {
+          setProfileData((p) => ({ ...p, alarmEnabled: enabled }))
+        },
+        dismissAlarm: () => {
+          setProfileData((p) => ({ ...p, lastAlarmDismissedDate: today() }))
         },
 
-        completeItem: (profileId, routineId, itemId) => {
-          ensureProfile(profileId);
-          const state = get().byProfile[profileId];
-          const current = state.completedItemIds[routineId] ?? [];
-          if (current.includes(itemId)) return;
-          const updated = { ...state.completedItemIds, [routineId]: [...current, itemId] };
-          const routine = state.routines.find((r) => r.id === routineId);
+        initRoutines: (role) => {
+          const pid = get().currentProfileId
+          if (!pid) return
+          const by = { ...get().byProfile }
+          const current = by[pid] ?? defaultProfileData()
+          let nextRoutines = current.routines
+          if (nextRoutines.length === 0) {
+            nextRoutines = role === 'child_school' ? ALL_DEFAULT_SCHOOL_KID_ROUTINES : ALL_DEFAULT_KID_ROUTINES
+          } else {
+            nextRoutines = nextRoutines.map((r) => ({
+              ...r,
+              items: r.items.map((item) => patchItemImage(item)),
+            }))
+          }
+          by[pid] = { ...current, routines: nextRoutines }
+          set({ byProfile: by })
+        },
 
-          set((s) => ({
-            byProfile: {
-              ...s.byProfile,
-              [profileId]: {
-                ...s.byProfile[profileId],
-                completedItemIds: updated,
-                points: {
-                  ...s.byProfile[profileId].points,
-                  totalPoints:
-                    s.byProfile[profileId].points.totalPoints + POINT_EVENTS.ITEM_COMPLETE,
-                },
-              },
+        setActiveRoutine: (routineId) => {
+          const log = get().getTodayLog(routineId)
+          set({
+            activeRoutineId: routineId,
+            sessionCompletedItems: log?.completedItems ?? [],
+          })
+        },
+
+        completeItem: (itemId) => {
+          const { sessionCompletedItems, activeRoutineId, currentProfileId } = get()
+          if (!currentProfileId) return
+          if (sessionCompletedItems.includes(itemId)) return
+
+          const data = get().byProfile[currentProfileId] ?? defaultProfileData()
+          const routine = data.routines.find((r) => r.id === activeRoutineId)
+          const newCompleted = [...sessionCompletedItems, itemId]
+          const isFullyCompleted = routine ? newCompleted.length >= routine.items.length : false
+          let earnedNow = POINT_RULES.itemComplete
+          if (isFullyCompleted) earnedNow += POINT_RULES.allComplete
+
+          const existingLogIdx = data.logs.findIndex((l) => l.routineId === activeRoutineId && l.date === today())
+          const newLog: RoutineLog = {
+            id: existingLogIdx >= 0 ? data.logs[existingLogIdx].id : crypto.randomUUID(),
+            routineId: activeRoutineId ?? '',
+            userId: 'local-kid',
+            date: today(),
+            completedItems: newCompleted,
+            isFullyCompleted,
+            pointsEarned: (existingLogIdx >= 0 ? data.logs[existingLogIdx].pointsEarned : 0) + earnedNow,
+            parentConfirmed: false,
+            createdAt: existingLogIdx >= 0 ? data.logs[existingLogIdx].createdAt : new Date().toISOString(),
+          }
+          const newLogs = [...data.logs]
+          if (existingLogIdx >= 0) newLogs[existingLogIdx] = newLog
+          else newLogs.push(newLog)
+
+          const rp = data.rewardPoints
+          const yesterday = new Date()
+          yesterday.setDate(yesterday.getDate() - 1)
+          const yesterdayStr = yesterday.toISOString().split('T')[0]
+          const isStreak = rp.lastCompletedDate === yesterdayStr || rp.lastCompletedDate === today()
+          const newStreak = isFullyCompleted ? (isStreak ? rp.streakDays + 1 : 1) : rp.streakDays
+
+          const by = { ...get().byProfile }
+          by[currentProfileId] = {
+            ...data,
+            logs: newLogs,
+            rewardPoints: {
+              ...rp,
+              totalPoints: rp.totalPoints + earnedNow,
+              streakDays: newStreak,
+              lastCompletedDate: isFullyCompleted ? today() : rp.lastCompletedDate,
             },
-          }));
+          }
+          set({
+            byProfile: by,
+            sessionCompletedItems: newCompleted,
+          })
+        },
 
-          if (routine && updated[routineId].length === routine.items.length) {
-            get().completeRoutine(profileId, routineId);
+        completeItemForRoutine: (routineId, itemId) => {
+          const pid = get().currentProfileId
+          if (!pid) return
+          const data = get().byProfile[pid] ?? defaultProfileData()
+          const todayLog = data.logs.find((l) => l.routineId === routineId && l.date === today())
+          const currentCompleted = todayLog?.completedItems ?? []
+          if (currentCompleted.includes(itemId)) return
+
+          const routine = data.routines.find((r) => r.id === routineId)
+          const newCompleted = [...currentCompleted, itemId]
+          const isFullyCompleted = routine ? newCompleted.length >= routine.items.length : false
+          let earnedNow = POINT_RULES.itemComplete
+          if (isFullyCompleted) earnedNow += POINT_RULES.allComplete
+
+          const existingLogIdx = data.logs.findIndex((l) => l.routineId === routineId && l.date === today())
+          const newLog: RoutineLog = {
+            id: existingLogIdx >= 0 ? data.logs[existingLogIdx].id : crypto.randomUUID(),
+            routineId,
+            userId: 'local-kid',
+            date: today(),
+            completedItems: newCompleted,
+            isFullyCompleted,
+            pointsEarned: (existingLogIdx >= 0 ? data.logs[existingLogIdx].pointsEarned : 0) + earnedNow,
+            parentConfirmed: false,
+            createdAt: existingLogIdx >= 0 ? data.logs[existingLogIdx].createdAt : new Date().toISOString(),
+          }
+          const newLogs = [...data.logs]
+          if (existingLogIdx >= 0) newLogs[existingLogIdx] = newLog
+          else newLogs.push(newLog)
+
+          const rp = data.rewardPoints
+          const yesterday = new Date()
+          yesterday.setDate(yesterday.getDate() - 1)
+          const yesterdayStr = yesterday.toISOString().split('T')[0]
+          const isStreak = rp.lastCompletedDate === yesterdayStr || rp.lastCompletedDate === today()
+          const newStreak = isFullyCompleted ? (isStreak ? rp.streakDays + 1 : 1) : rp.streakDays
+
+          const by = { ...get().byProfile }
+          by[pid] = {
+            ...data,
+            logs: newLogs,
+            rewardPoints: {
+              ...rp,
+              totalPoints: rp.totalPoints + earnedNow,
+              streakDays: newStreak,
+              lastCompletedDate: isFullyCompleted ? today() : rp.lastCompletedDate,
+            },
+          }
+          set({ byProfile: by })
+        },
+
+        setRoutines: (templates, forProfileId) => {
+          const pid = forProfileId ?? get().currentProfileId
+          if (!pid) return
+          const by = { ...get().byProfile }
+          const current = by[pid] ?? defaultProfileData()
+          by[pid] = { ...current, routines: templates }
+          set({ byProfile: by })
+        },
+
+        requestConfirm: (itemId) => {
+          const { pendingConfirmItems } = get()
+          if (pendingConfirmItems.includes(itemId)) return
+          set({ pendingConfirmItems: [...pendingConfirmItems, itemId] })
+        },
+
+        parentApprove: (itemId) => {
+          const { pendingConfirmItems } = get()
+          get().completeItem(itemId)
+          set({ pendingConfirmItems: pendingConfirmItems.filter((id) => id !== itemId) })
+        },
+
+        /** 부모 대시보드용: 루틴을 지정해 항목 승인 (activeRoutineId 없을 때 사용) */
+        parentApproveForRoutine: (routineId, itemId) => {
+          const { pendingConfirmItems } = get()
+          get().completeItemForRoutine(routineId, itemId)
+          set({ pendingConfirmItems: pendingConfirmItems.filter((id) => id !== itemId) })
+        },
+
+        parentReject: (itemId) => {
+          set((s) => ({ pendingConfirmItems: s.pendingConfirmItems.filter((id) => id !== itemId) }))
+        },
+
+        resetSession: () => set({ activeRoutineId: null, sessionCompletedItems: [], pendingConfirmItems: [] }),
+
+        markRewardShown: (routineId) => {
+          const pid = get().currentProfileId
+          if (!pid) return
+          const key = `${routineId}_${today()}`
+          const by = { ...get().byProfile }
+          const current = by[pid] ?? defaultProfileData()
+          if (!current.rewardShownDates.includes(key)) {
+            by[pid] = { ...current, rewardShownDates: [...current.rewardShownDates, key] }
+            set({ byProfile: by })
           }
         },
 
-        uncompleteItem: (profileId, routineId, itemId) => {
-          ensureProfile(profileId);
-          const state = get().byProfile[profileId];
-          const current = state.completedItemIds[routineId] ?? [];
-          set((s) => ({
-            byProfile: {
-              ...s.byProfile,
-              [profileId]: {
-                ...s.byProfile[profileId],
-                completedItemIds: {
-                  ...s.byProfile[profileId].completedItemIds,
-                  [routineId]: current.filter((id) => id !== itemId),
-                },
-                fullyCompletedToday: {
-                  ...s.byProfile[profileId].fullyCompletedToday,
-                  [routineId]: false,
-                },
-              },
-            },
-          }));
+        hasShownReward: (routineId) => {
+          const data = getProfileData()
+          if (!data) return false
+          const key = `${routineId}_${today()}`
+          return data.rewardShownDates.includes(key)
         },
 
-        completeRoutine: (profileId, routineId) => {
-          ensureProfile(profileId);
-          const state = get().byProfile[profileId];
-          const points = state.points;
-          const today = new Date().toISOString().split('T')[0];
-          const yesterday = new Date();
-          yesterday.setDate(yesterday.getDate() - 1);
-          const yesterdayStr = yesterday.toISOString().split('T')[0];
-          const isStreak = points.lastCompletedDate === yesterdayStr;
-          const newStreak = isStreak ? points.streakDays + 1 : 1;
-          let bonusPoints = POINT_EVENTS.FULLY_COMPLETE;
-          if (newStreak >= 7) bonusPoints += POINT_EVENTS.STREAK_7;
-          else if (newStreak >= 3) bonusPoints += POINT_EVENTS.STREAK_3;
-
-          set((s) => ({
-            byProfile: {
-              ...s.byProfile,
-              [profileId]: {
-                ...s.byProfile[profileId],
-                fullyCompletedToday: {
-                  ...s.byProfile[profileId].fullyCompletedToday,
-                  [routineId]: true,
-                },
-                points: {
-                  ...s.byProfile[profileId].points,
-                  totalPoints: s.byProfile[profileId].points.totalPoints + bonusPoints,
-                  streakDays: newStreak,
-                  lastCompletedDate: today,
-                },
-              },
-            },
-          }));
-          get().feedCompanion(profileId, 15);
+        confirmRoutineComplete: () => {
+          const pid = get().currentProfileId
+          const { activeRoutineId } = get()
+          if (!pid || !activeRoutineId) return
+          const by = { ...get().byProfile }
+          const data = by[pid] ?? defaultProfileData()
+          const idx = data.logs.findIndex((l) => l.routineId === activeRoutineId && l.date === today())
+          if (idx < 0) return
+          const newLogs = [...data.logs]
+          newLogs[idx] = { ...newLogs[idx], parentConfirmed: true }
+          by[pid] = { ...data, logs: newLogs }
+          set({ byProfile: by })
         },
 
-        addRoutineItem: (profileId, routineId, item) => {
-          ensureProfile(profileId);
-          set((s) => ({
-            byProfile: {
-              ...s.byProfile,
-              [profileId]: {
-                ...s.byProfile[profileId],
-                routines: s.byProfile[profileId].routines.map((r) =>
-                  r.id === routineId ? { ...r, items: [...r.items, item] } : r
-                ),
-              },
-            },
-          }));
+        addPoints: (points) => {
+          setProfileData((p) => ({
+            ...p,
+            rewardPoints: { ...p.rewardPoints, totalPoints: p.rewardPoints.totalPoints + points },
+          }))
         },
 
-        removeRoutineItem: (profileId, routineId, itemId) => {
-          ensureProfile(profileId);
-          set((s) => ({
-            byProfile: {
-              ...s.byProfile,
-              [profileId]: {
-                ...s.byProfile[profileId],
-                routines: s.byProfile[profileId].routines.map((r) =>
-                  r.id === routineId
-                    ? { ...r, items: r.items.filter((i) => i.id !== itemId) }
-                    : r
-                ),
-              },
-            },
-          }));
+        getTodayLog: (routineId) => {
+          const data = getProfileData()
+          if (!data) return undefined
+          return data.logs.find((l) => l.routineId === routineId && l.date === today())
         },
 
-        reorderItems: (profileId, routineId, items) => {
-          ensureProfile(profileId);
-          set((s) => ({
-            byProfile: {
-              ...s.byProfile,
-              [profileId]: {
-                ...s.byProfile[profileId],
-                routines: s.byProfile[profileId].routines.map((r) =>
-                  r.id === routineId ? { ...r, items } : r
-                ),
-              },
-            },
-          }));
+        getTodayLogForProfile: (profileId, routineId) => {
+          const data = get().byProfile[profileId] ?? defaultProfileData()
+          return data.logs.find((l) => l.routineId === routineId && l.date === today())
         },
 
-        setCompanion: (profileId, companion) => {
-          ensureProfile(profileId);
-          set((s) => ({
-            byProfile: {
-              ...s.byProfile,
-              [profileId]: { ...s.byProfile[profileId], companion },
-            },
-          }));
+        getActiveRoutine: () => {
+          const data = getProfileData()
+          const { activeRoutineId } = get()
+          if (!data || !activeRoutineId) return undefined
+          return data.routines.find((r) => r.id === activeRoutineId)
         },
 
-        feedCompanion: (profileId, amount) => {
-          ensureProfile(profileId);
-          const state = get().byProfile[profileId];
-          const companion = state.companion;
-          if (!companion) return;
-          const newHappiness = Math.min(100, companion.happiness + amount);
-          const newExp = companion.totalExp + amount;
-          const thresholds = [0, 100, 300, 600, 1000];
-          let newStage = companion.growthStage;
-          for (let i = 4; i >= 0; i--) {
-            if (newExp >= thresholds[i]) {
-              newStage = i as 0 | 1 | 2 | 3 | 4;
-              break;
-            }
+        getCompletionRate: (routineId) => {
+          const data = getProfileData()
+          if (!data) return 0
+          const routine = data.routines.find((r) => r.id === routineId)
+          const log = data.logs.find((l) => l.routineId === routineId && l.date === today())
+          if (!routine || routine.items.length === 0) return 0
+          return (log?.completedItems.length ?? 0) / routine.items.length
+        },
+
+        getCompletionRateForProfile: (profileId, routineId) => {
+          const data = get().byProfile[profileId] ?? defaultProfileData()
+          const routine = data.routines.find((r) => r.id === routineId)
+          const log = data.logs.find((l) => l.routineId === routineId && l.date === today())
+          if (!routine || routine.items.length === 0) return 0
+          return (log?.completedItems.length ?? 0) / routine.items.length
+        },
+
+        applyTimerSettings: (timers) => {
+          const pid = get().currentProfileId
+          if (!pid) return
+          const by = { ...get().byProfile }
+          const current = by[pid] ?? defaultProfileData()
+          by[pid] = {
+            ...current,
+            routines: current.routines.map((routine) => ({
+              ...routine,
+              items: routine.items.map((item) => {
+                const sec = timers[item.id] ?? 0
+                return {
+                  ...item,
+                  timerEnabled: sec > 0,
+                  timerSeconds: sec > 0 ? sec : item.timerSeconds,
+                }
+              }),
+            })),
           }
-          set((s) => ({
-            byProfile: {
-              ...s.byProfile,
-              [profileId]: {
-                ...s.byProfile[profileId],
-                companion: {
-                  ...companion,
-                  happiness: newHappiness,
-                  totalExp: newExp,
-                  growthStage: newStage,
-                  lastUpdated: new Date().toISOString(),
-                },
-              },
-            },
-          }));
+          set({ byProfile: by })
         },
 
-        addPoints: (profileId, amount) => {
-          ensureProfile(profileId);
-          set((s) => ({
-            byProfile: {
-              ...s.byProfile,
-              [profileId]: {
-                ...s.byProfile[profileId],
-                points: {
-                  ...s.byProfile[profileId].points,
-                  totalPoints: s.byProfile[profileId].points.totalPoints + amount,
-                },
-              },
-            },
-          }));
-        },
-
-        resetDailyProgress: (profileId) => {
-          ensureProfile(profileId);
-          set((s) => {
-            const st = s.byProfile[profileId];
-            const companion = st?.companion;
-            return {
-              byProfile: {
-                ...s.byProfile,
-                [profileId]: {
-                  ...s.byProfile[profileId],
-                  completedItemIds: {},
-                  fullyCompletedToday: {},
-                  ...(companion && {
-                    companion: {
-                      ...companion,
-                      happiness: Math.max(0, companion.happiness - 5),
-                      hunger: Math.max(0, (companion.hunger ?? 0) - 10),
-                    },
-                  }),
-                },
-              },
-            };
-          });
-        },
-      };
+        checkAndReset: () => set({ activeRoutineId: null, sessionCompletedItems: [], pendingConfirmItems: [] }),
+      }
     },
-    { name: 'kid-routine-store' }
+    {
+      name: 'rhymia-kid-routine',
+      // persist에는 byProfile, currentProfileId만 저장하고 나머지는 rehydrate 시 기본값 사용
+      partialize: (state) =>
+        ({ byProfile: state.byProfile, currentProfileId: state.currentProfileId }) as KidRoutineState,
+      migrate: (persisted: unknown) => {
+        const raw = persisted as Record<string, unknown> | undefined
+        if (!raw) return { byProfile: {}, currentProfileId: null, activeRoutineId: null, sessionCompletedItems: [], pendingConfirmItems: [] } as unknown as KidRoutineState
+        if (Array.isArray(raw.routines)) {
+          const legacy: ProfileRoutineData = {
+            routines: raw.routines as RoutineTemplate[],
+            logs: (raw.logs as RoutineLog[]) ?? [],
+            rewardPoints: (raw.rewardPoints as RewardPoints) ?? defaultRewardPoints,
+            rewardShownDates: (raw.rewardShownDates as string[]) ?? [],
+            wakeAlarmTime: (raw.wakeAlarmTime as string) ?? '07:00',
+            alarmEnabled: raw.alarmEnabled !== false,
+            lastAlarmDismissedDate: (raw.lastAlarmDismissedDate as string | null) ?? null,
+          }
+          return {
+            byProfile: { default: legacy },
+            currentProfileId: 'default',
+            activeRoutineId: null,
+            sessionCompletedItems: [],
+            pendingConfirmItems: [],
+          } as unknown as KidRoutineState
+        }
+        return {
+          ...raw,
+          activeRoutineId: null,
+          sessionCompletedItems: [],
+          pendingConfirmItems: [],
+        } as unknown as KidRoutineState
+      },
+      version: 1,
+    }
   )
-);
+)
+
+/** 현재 프로필의 routines (선택자) */
+export function selectRoutines(state: KidRoutineState): RoutineTemplate[] {
+  const pid = state.currentProfileId
+  if (!pid || !state.byProfile[pid]) return []
+  return state.byProfile[pid].routines
+}
+
+export function selectRewardPoints(state: KidRoutineState): RewardPoints {
+  const pid = state.currentProfileId
+  if (!pid || !state.byProfile[pid]) return defaultRewardPoints
+  return state.byProfile[pid].rewardPoints
+}
+
+export function selectWakeAlarmTime(state: KidRoutineState): string {
+  const pid = state.currentProfileId
+  if (!pid || !state.byProfile[pid]) return '07:00'
+  return state.byProfile[pid].wakeAlarmTime
+}
+
+export function selectAlarmEnabled(state: KidRoutineState): boolean {
+  const pid = state.currentProfileId
+  if (!pid || !state.byProfile[pid]) return true
+  return state.byProfile[pid].alarmEnabled
+}
+
+export function selectLastAlarmDismissedDate(state: KidRoutineState): string | null {
+  const pid = state.currentProfileId
+  if (!pid || !state.byProfile[pid]) return null
+  return state.byProfile[pid].lastAlarmDismissedDate
+}
 
 /**
- * 특정 아이 프로필의 루틴 상태·액션만 구독하는 훅.
- * kid/[id] 페이지에서 useKidRoutineForProfile(id) 형태로 사용.
+ * 프로필별 아이 루틴 API (지정한 profileId 또는 현재 프로필 기준)
  */
-export function useKidRoutineForProfile(profileId: string | undefined) {
-  const byProfile = useKidRoutineStore((s) => s.byProfile);
-  const setRoutinesFn = useKidRoutineStore((s) => s.setRoutines);
-  const completeItemFn = useKidRoutineStore((s) => s.completeItem);
-  const uncompleteItemFn = useKidRoutineStore((s) => s.uncompleteItem);
-  const completeRoutineFn = useKidRoutineStore((s) => s.completeRoutine);
-  const setCompanionFn = useKidRoutineStore((s) => s.setCompanion);
-  const feedCompanionFn = useKidRoutineStore((s) => s.feedCompanion);
+export function useKidRoutineForProfile(profileId: string | undefined): UseKidRoutineForProfileReturn {
+  const setCurrentProfileId = useKidRoutineStore((s) => s.setCurrentProfileId)
+  const routines = useKidRoutineStore((s) => {
+    const id = profileId ?? s.currentProfileId
+    return id ? (s.byProfile[id]?.routines ?? []) : []
+  })
+  const getTodayLogForProfile = useKidRoutineStore((s) => s.getTodayLogForProfile)
+  const getTodayLog = useKidRoutineStore((s) => s.getTodayLog)
+  const setRoutinesRaw = useKidRoutineStore((s) => s.setRoutines)
+  const setRoutines = (templates: RoutineTemplate[]) => setRoutinesRaw(templates, profileId ?? undefined)
+  const completeItemForRoutine = useKidRoutineStore((s) => s.completeItemForRoutine)
+  const rewardPoints = useKidRoutineStore((s) => {
+    const id = profileId ?? s.currentProfileId
+    return id && s.byProfile[id] ? s.byProfile[id].rewardPoints : defaultRewardPoints
+  })
 
-  if (!profileId) {
-    return {
-      routines: [] as RoutineTemplate[],
-      completedItemIds: {} as Record<string, string[]>,
-      fullyCompletedToday: {} as Record<string, boolean>,
-      points: { userId: '', totalPoints: 0, streakDays: 0, lastCompletedDate: null },
-      companion: null as VirtualCompanion | null,
-      setRoutines: (_: RoutineTemplate[]) => {},
-      completeItem: (_: string, __: string) => {},
-      uncompleteItem: (_: string, __: string) => {},
-      completeRoutine: (_: string) => {},
-      setCompanion: (_: VirtualCompanion) => {},
-      feedCompanion: (_: number) => {},
-    };
+  const getLog = (rid: string) =>
+    profileId ? getTodayLogForProfile(profileId, rid) : getTodayLog(rid)
+
+  const completedItemIds: CompletedItemIdsByTab = {
+    morning: getLog('default-kid-morning')?.completedItems ?? [],
+    evening: getLog('default-kid-evening')?.completedItems ?? [],
+    weekend: getLog('weekend')?.completedItems ?? [],
+  }
+  const fullyCompletedToday: Record<RoutineTabType, boolean> = {
+    morning: getLog('default-kid-morning')?.isFullyCompleted ?? false,
+    evening: getLog('default-kid-evening')?.isFullyCompleted ?? false,
+    weekend: getLog('weekend')?.isFullyCompleted ?? false,
+  }
+  const points: KidPoints = {
+    totalPoints: rewardPoints.totalPoints,
+    streakDays: rewardPoints.streakDays,
   }
 
-  const state = byProfile[profileId] ?? defaultProfileState(profileId);
-
   return {
-    ...state,
-    setRoutines: (routines: RoutineTemplate[]) => setRoutinesFn(profileId, routines),
-    completeItem: (routineId: string, itemId: string) =>
-      completeItemFn(profileId, routineId, itemId),
-    uncompleteItem: (routineId: string, itemId: string) =>
-      uncompleteItemFn(profileId, routineId, itemId),
-    completeRoutine: (routineId: string) => completeRoutineFn(profileId, routineId),
-    setCompanion: (c: VirtualCompanion) => setCompanionFn(profileId, c),
-    feedCompanion: (amount: number) => feedCompanionFn(profileId, amount),
-  };
+    routines,
+    setRoutines,
+    completedItemIds,
+    fullyCompletedToday,
+    points,
+    companion: null,
+    setCompanion: () => {},
+    completeItem: completeItemForRoutine,
+  }
 }

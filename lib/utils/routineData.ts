@@ -101,6 +101,7 @@ function toRoutineItem(data: RoutineDataItem, order: number): RoutineItem {
     ttsText: data.ttsText,
     category: data.category as RoutineItem['category'],
     order,
+    timerSeconds: 0,
   };
 }
 

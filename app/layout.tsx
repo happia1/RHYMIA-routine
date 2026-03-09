@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { AppShell } from "@/components/layout/AppShell";
 
 /**
  * 루트 레이아웃 (Next.js App Router 필수)
- * 모든 페이지를 감싸며, 공통 HTML/body와 글로벌 스타일을 적용합니다.
+ * 프로필 없으면 /onboarding 리다이렉트, 온보딩이 아닐 때만 하단 탭바 표시.
  */
 export const metadata: Metadata = {
   title: "RHYMIA Routine",
@@ -17,7 +18,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        <AppShell>{children}</AppShell>
+      </body>
     </html>
   );
 }

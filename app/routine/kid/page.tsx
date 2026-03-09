@@ -1,218 +1,158 @@
-'use client';
-
 /**
- * 루틴 키드 메인 화면 (체커보드)
- * 상단: 날짜/요일, 아침·저녁·주말 탭, 포인트
- * 리미 상태바 + 오늘 완료율 바
- * 4열 그리드 루틴 카드 → 하단 "오늘 루틴 완료!" 보상 화면
+ * 아이용 루틴 메인 화면 (오늘 할 루틴 목록)
+ * 비개발자: 낮에는 "오늘의 루틴" 카드를 보여주고, 밤(21시~06시)에는 캐릭터가 잠자는 화면을 보여줍니다.
+ * 기상 시간이 되면 미션 화면으로 전환되며 알람이 울리고, 알람 설정은 별도 화면에서 할 수 있습니다.
  */
 
-import { useEffect, useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useKidRoutineForProfile } from '@/lib/stores/kidRoutineStore';
-import {
-  getRoutineByTab,
-  getRoutineTemplatesForStore,
-  type RoutineTabType,
-} from '@/lib/utils/routineData';
-import RimiCharacter from '@/components/shared/RimiCharacter';
-import RoutineCardImage from '@/components/kid/RoutineCardImage';
+'use client'
 
-const WEEKDAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'];
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Settings } from 'lucide-react'
+import { useKidRoutineStore, selectRoutines, selectWakeAlarmTime, selectAlarmEnabled, selectLastAlarmDismissedDate } from '@/lib/stores/kidRoutineStore'
+import { useProfileStore } from '@/lib/stores/profileStore'
+import { getTodayRoutines } from '@/lib/utils/defaultRoutines'
+import { isNightTime, isWakeTimeNow } from '@/lib/utils/sleepSchedule'
+import { SleepingView } from '@/components/kid/SleepingView'
+import { WakeAlarmOverlay } from '@/components/kid/WakeAlarmOverlay'
+import { DepartureBanner } from '@/components/kid/DepartureBanner'
 
-const TABS: { key: RoutineTabType; label: string; emoji: string }[] = [
-  { key: 'morning', label: '아침', emoji: '🌅' },
-  { key: 'evening', label: '저녁', emoji: '🌙' },
-  { key: 'weekend', label: '주말', emoji: '🎉' },
-];
-
-/** 오늘 요일로 기본 탭 결정: 평일 → 아침, 주말 → 주말 */
-function getDefaultTab(): RoutineTabType {
-  const day = new Date().getDay();
-  if (day === 0 || day === 6) return 'weekend';
-  return 'morning';
+/** 루틴 타입별 이모지·라벨·그라데이션 색 (카드 스타일용) */
+const ROUTINE_TYPE_META = {
+  morning: { emoji: '🌅', label: '아침 루틴', color: 'from-[#FFD93D] to-[#FF8FAB]' },
+  evening: { emoji: '🌙', label: '저녁 루틴', color: 'from-[#A8E6CF] to-[#7EB8D4]' },
+  weekend: { emoji: '🎉', label: '주말 루틴', color: 'from-[#FF8FAB] to-[#C77DFF]' },
+  special: { emoji: '⭐', label: '특별 루틴', color: 'from-[#FFD93D] to-[#A8E6CF]' },
 }
 
-export default function KidRoutinePage() {
-  const {
-    routines,
-    setRoutines,
-    completedItemIds,
-    fullyCompletedToday,
-    points,
-    companion,
-    completeItem,
-  } = useKidRoutineForProfile('kid-default');
+export default function KidRoutineMainPage() {
+  const router = useRouter()
+  const activeProfile = useProfileStore((s) => s.getActiveProfile())
+  const setCurrentProfileId = useKidRoutineStore((s) => s.setCurrentProfileId)
+  const routines = useKidRoutineStore(selectRoutines)
+  const initRoutines = useKidRoutineStore((s) => s.initRoutines)
+  const getCompletionRate = useKidRoutineStore((s) => s.getCompletionRate)
+  const wakeAlarmTime = useKidRoutineStore(selectWakeAlarmTime)
+  const alarmEnabled = useKidRoutineStore(selectAlarmEnabled)
+  const lastAlarmDismissedDate = useKidRoutineStore(selectLastAlarmDismissedDate)
+  const dismissAlarm = useKidRoutineStore((s) => s.dismissAlarm)
 
-  const [activeTab, setActiveTab] = useState<RoutineTabType>(() => getDefaultTab());
-  const [showReward, setShowReward] = useState(false);
-
-  // 스토어가 비어 있으면 routineData 기준으로 템플릿 세팅
+  // 현재 선택된 프로필 기준으로 루틴 데이터 사용 (프로필 전환 시 반영)
   useEffect(() => {
-    if (routines.length === 0) {
-      setRoutines(getRoutineTemplatesForStore('kid-default'));
-    }
-  }, [routines.length, setRoutines]);
+    setCurrentProfileId(activeProfile?.id ?? null)
+  }, [activeProfile?.id, setCurrentProfileId])
 
-  const currentItems = useMemo(() => getRoutineByTab(activeTab), [activeTab]);
-  const routineId = activeTab;
-  const completedIds = completedItemIds[routineId] ?? [];
-  const totalCount = currentItems.length;
-  const completedCount = completedIds.length;
-  const isFullyDone = fullyCompletedToday[routineId] ?? false;
-  const progressPercent = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
-
-  // 전체 완료 시 보상 화면 자동 표시 (한 번만)
+  // 시간에 따라 밤/낮 전환을 위해 1분마다 리렌더
+  const [, setTick] = useState(0)
   useEffect(() => {
-    if (isFullyDone && !showReward) {
-      const t = setTimeout(() => setShowReward(true), 600);
-      return () => clearTimeout(t);
-    }
-  }, [isFullyDone, showReward]);
+    const id = setInterval(() => setTick((n) => n + 1), 60000)
+    return () => clearInterval(id)
+  }, [])
 
-  const handleCompleteItem = (itemId: string) => {
-    completeItem(routineId, itemId);
-    // 스토어에서 마지막 항목 완료 시 completeRoutine() 자동 호출
-  };
+  // 앱 들어올 때 / 프로필 전환 시 루틴 초기화·보정 (학령기면 학령기 기본 루틴)
+  useEffect(() => {
+    if (activeProfile?.id) initRoutines(activeProfile.role)
+  }, [activeProfile?.id, activeProfile?.role, initRoutines])
 
-  const todayStr = useMemo(() => {
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    const week = WEEKDAY_NAMES[d.getDay()];
-    return { date: `${y}.${m}.${day}`, week };
-  }, []);
+  const night = isNightTime()
+  const today = new Date().toISOString().split('T')[0]
+  const showAlarm =
+    !night &&
+    alarmEnabled &&
+    isWakeTimeNow(wakeAlarmTime) &&
+    lastAlarmDismissedDate !== today
+
+  // 밤 시간대: 캐릭터 잠자는 화면만 표시
+  if (night) {
+    return <SleepingView />
+  }
+
+  // 오늘 요일에 맞는 루틴만 (예: 평일=아침·저녁, 주말=주말 루틴)
+  const todayRoutines = getTodayRoutines(routines)
 
   return (
-    <div
-      className="min-h-screen bg-gradient-to-b from-pink-50 to-blue-50 pb-24"
-      style={{ fontFamily: "'Nanum Gothic', sans-serif" }}
-    >
-      {/* ─── 1. 상단 헤더 ─── */}
-      <header className="sticky top-0 z-10 bg-white/80 backdrop-blur border-b border-pink-100 px-4 py-3 safe-area-inset-top">
-        <div className="flex items-center justify-between gap-2">
-          <div className="text-left">
-            <p className="text-gray-500 text-sm">{todayStr.date}</p>
-            <p className="text-gray-800 font-bold text-lg">{todayStr.week}요일</p>
-          </div>
-
-          <div className="flex rounded-full bg-gray-100 p-1 gap-0.5">
-            {TABS.map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setActiveTab(tab.key)}
-                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  activeTab === tab.key
-                    ? 'bg-white shadow text-pink-600'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {tab.emoji} {tab.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="text-right flex items-center gap-1">
-            <span className="text-xl" aria-hidden>⭐</span>
-            <span className="font-bold text-gray-800 tabular-nums">{points.totalPoints}P</span>
-          </div>
-        </div>
-      </header>
-
-      {/* ─── 2. 리미 상태바 ─── */}
-      <section className="px-4 py-3 border-b border-pink-100/80">
-        <div className="flex items-center gap-3">
-          <RimiCharacter size="sm" message="오늘도 화이팅!" className="flex-shrink-0" />
-          <div className="flex-1 space-y-2 min-w-0">
-            <div>
-              <p className="text-xs text-gray-500 mb-0.5">행복도</p>
-              <div className="h-2 rounded-full bg-gray-200 overflow-hidden">
-                <motion.div
-                  className="h-full rounded-full bg-pink-400"
-                  initial={false}
-                  animate={{ width: `${companion?.happiness ?? 0}%` }}
-                  transition={{ duration: 0.4 }}
-                />
-              </div>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 mb-0.5">오늘 완료율</p>
-              <div className="h-2 rounded-full bg-gray-200 overflow-hidden">
-                <motion.div
-                  className="h-full rounded-full bg-teal-400"
-                  initial={false}
-                  animate={{ width: `${progressPercent}%` }}
-                  transition={{ duration: 0.4 }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ─── 3. 루틴 체커보드 (4열 그리드) ─── */}
-      <main className="px-4 py-4">
-        <div className="grid grid-cols-4 gap-3 max-w-lg mx-auto">
-          {currentItems.map((item) => (
-            <RoutineCardImage
-              key={item.id}
-              item={item}
-              isCompleted={completedIds.includes(item.id)}
-              onComplete={handleCompleteItem}
-            />
-          ))}
-        </div>
-      </main>
-
-      {/* ─── 4. 하단 완료 버튼 ─── */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-white to-transparent safe-area-inset-bottom">
-        <motion.button
-          type="button"
-          onClick={() => setShowReward(true)}
-          disabled={!isFullyDone}
-          className={`w-full max-w-md mx-auto py-4 rounded-2xl font-bold text-lg shadow-lg flex items-center justify-center gap-2 ${
-            isFullyDone
-              ? 'bg-gradient-to-r from-pink-400 to-orange-400 text-white'
-              : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-          }`}
-          whileTap={isFullyDone ? { scale: 0.98 } : {}}
-        >
-          오늘 루틴 완료! 🎉
-        </motion.button>
-      </div>
-
-      {/* ─── 보상 모달 (리미 excited + 포인트) ─── */}
+    <div className="min-h-screen bg-[#FFF9F0] px-5 py-8 pb-24">
+      {/* 기상 시간: 알람 오버레이 (알람 끄기 전까지 소리 + 화면) */}
       <AnimatePresence>
-        {showReward && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-gradient-to-b from-amber-50 to-pink-50 flex flex-col items-center justify-center p-6"
-          >
-            <RimiCharacter mood="excited" size="xl" message="완료 대단해요!" />
-            <motion.p
-              initial={{ scale: 0.8 }}
-              animate={{ scale: 1 }}
-              transition={{ delay: 0.2 }}
-              className="mt-6 text-2xl font-bold text-gray-800"
-            >
-              ⭐ {points.totalPoints}P 획득!
-            </motion.p>
-            <p className="text-gray-600 mt-2">오늘도 루틴을 잘 지켰어요.</p>
-            <motion.button
-              type="button"
-              whileTap={{ scale: 0.96 }}
-              onClick={() => setShowReward(false)}
-              className="mt-8 px-8 py-3 rounded-2xl bg-pink-400 text-white font-bold shadow-lg"
-            >
-              돌아가기 🏠
-            </motion.button>
-          </motion.div>
+        {showAlarm && (
+          <WakeAlarmOverlay
+            onDismiss={dismissAlarm}
+          />
         )}
       </AnimatePresence>
+
+      {/* 알람 설정 링크 (우측 상단) */}
+      <div className="flex justify-end mb-2">
+        <Link
+          href="/routine/kid/alarm"
+          className="flex items-center gap-1 text-gray-400 hover:text-gray-600 text-sm"
+        >
+          <Settings className="w-4 h-4" />
+          알람 설정
+        </Link>
+      </div>
+      {/* 상단 인사 문구 */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="text-center mb-8"
+      >
+        <div className="text-6xl mb-3">🌟</div>
+        <h1 className="text-3xl font-black text-gray-700">오늘의 루틴</h1>
+        <p className="text-gray-400 mt-1">어떤 루틴을 할까요?</p>
+      </motion.div>
+
+      {/* 등원까지 남은 시간 카운트다운 (자녀 프로필 + 출발 시간 설정 시에만 표시) */}
+      <DepartureBanner />
+
+      {/* 루틴 카드 목록 (아침/저녁/주말 등) */}
+      <div className="flex flex-col gap-4">
+        {todayRoutines.map((routine, idx) => {
+          const meta = ROUTINE_TYPE_META[routine.type] ?? ROUTINE_TYPE_META.special
+          const rate = getCompletionRate(routine.id)
+          const isDone = rate >= 1
+
+          return (
+            <motion.button
+              key={routine.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.1 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => router.push(`/routine/kid/${routine.id}`)}
+              className={`
+                relative w-full rounded-3xl p-6 text-left overflow-hidden
+                bg-gradient-to-br ${meta.color}
+                shadow-lg
+              `}
+            >
+              <div className="flex items-center gap-4">
+                <span className="text-5xl">{meta.emoji}</span>
+                <div className="flex-1">
+                  <p className="text-xl font-black text-white">{routine.title}</p>
+                  <p className="text-white/80 text-sm mt-0.5">
+                    {routine.items.length}개 항목
+                  </p>
+                </div>
+                {isDone && <span className="text-3xl">✅</span>}
+              </div>
+
+              {/* 진행률 바 (오늘 이 루틴 몇 % 완료했는지) */}
+              <div className="mt-4 h-2 bg-white/30 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-white rounded-full transition-all duration-500"
+                  style={{ width: `${rate * 100}%` }}
+                />
+              </div>
+              <p className="text-white/70 text-xs mt-1 text-right">
+                {Math.round(rate * 100)}% 완료
+              </p>
+            </motion.button>
+          )
+        })}
+      </div>
     </div>
-  );
+  )
 }

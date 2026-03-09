@@ -10,6 +10,7 @@ import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import RimiCharacter from '@/components/shared/RimiCharacter';
 import StickerPicker from '@/components/parent/StickerPicker';
+import { ConfirmPanel } from '@/components/parent/ConfirmPanel';
 import type { StickerType } from '@/types/routine';
 import { STICKER_META } from '@/types/routine';
 
@@ -25,7 +26,7 @@ const MOCK_MORNING_ITEMS = [
 ];
 
 /** 최근 받은 스티커 mock */
-const MOCK_RECENT_STICKERS: StickerType[] = ['star', 'heart', 'sparkle'];
+const MOCK_RECENT_STICKERS: StickerType[] = ['star', 'heart', 'shining'];
 
 export default function ParentDashboardPage() {
   const [showStickerPicker, setShowStickerPicker] = useState(false);
@@ -168,6 +169,11 @@ export default function ParentDashboardPage() {
             onClose={() => setShowStickerPicker(false)}
           />
         )}
+      </AnimatePresence>
+
+      {/* 자녀가 미션 완료 요청 시 하단에 뜨는 승인/거절 패널 */}
+      <AnimatePresence>
+        <ConfirmPanel />
       </AnimatePresence>
     </main>
   );

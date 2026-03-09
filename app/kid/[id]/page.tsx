@@ -155,7 +155,7 @@ export default function KidRoutineByIdPage() {
             <RimiCharacter size="sm" message="오늘도 화이팅!" className="flex-shrink-0" />
           ) : (
             <div className="flex-shrink-0 w-16 h-16 flex items-center justify-center text-4xl bg-white rounded-2xl border-2 border-pink-100">
-              {CHARACTER_EMOJI[profile.character] ?? '🐧'}
+              {CHARACTER_EMOJI[profile.character ?? 'penguin'] ?? '🐧'}
             </div>
           )}
           <div className="flex-1 min-w-0">
@@ -252,7 +252,7 @@ export default function KidRoutineByIdPage() {
                 transition={{ repeat: Infinity, duration: 0.6 }}
                 className="text-8xl"
               >
-                {CHARACTER_EMOJI[profile.character] ?? '🎉'}
+                {CHARACTER_EMOJI[profile.character ?? 'penguin'] ?? '🎉'}
               </motion.span>
             )}
             <motion.p

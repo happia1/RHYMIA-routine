@@ -14,10 +14,11 @@ import {
   usePersonalRoutineForProfile,
   getDefaultPersonalItems,
   type PersonalSlot,
-} from '@/lib/stores/personalRoutineStore';
+} from '@/lib/stores/personalRoutineByProfileStore';
 import { isPersonalProfile } from '@/types/profile';
 import type { RoutineItem } from '@/types/routine';
 import RimiCharacter from '@/components/shared/RimiCharacter';
+import { RoutineItemIcon } from '@/components/kid/RoutineItemIcon';
 
 const SLOTS: { key: PersonalSlot; label: string; emoji: string }[] = [
   { key: 'morning', label: '아침', emoji: '☀️' },
@@ -56,20 +57,29 @@ export default function PersonalRoutineByIdPage() {
   const [activeSlot, setActiveSlot] = useState<PersonalSlot>('morning');
   const [newItemLabel, setNewItemLabel] = useState('');
 
+  // 엄마/아빠 또는 학령기 자녀만 이 화면 사용 (미취학은 /routine/kid)
+  const canUsePersonal = profile && (isPersonalProfile(profile) || profile.role === 'child_school');
+
   useEffect(() => {
     if (!id || !profile) {
       router.replace('/');
       return;
     }
-    if (!isPersonalProfile(profile)) router.replace('/');
+    if (profile.role === 'child_preschool') {
+      router.replace('/routine/kid');
+      return;
+    }
+    if (!isPersonalProfile(profile) && profile.role !== 'child_school') {
+      router.replace('/');
+    }
   }, [id, profile, router]);
 
-  // 목표 기반 기본 루틴 세팅 (최초 1회)
+  // 목표 기반 기본 루틴 세팅 (최초 1회, 엄마/아빠만)
   useEffect(() => {
     if (!id || !profile || !isPersonalProfile(profile)) return;
     const morningItems = itemsBySlot.morning;
-    if (morningItems.length === 0 && profile.goals.length > 0) {
-      const defaultItems = getDefaultPersonalItems(profile.goals);
+    if (morningItems.length === 0 && (profile.goals?.length ?? 0) > 0) {
+      const defaultItems = getDefaultPersonalItems(profile.goals ?? []);
       setItemsForSlot('morning', defaultItems);
     }
   }, [id, profile, itemsBySlot.morning.length, setItemsForSlot]);
@@ -97,12 +107,13 @@ export default function PersonalRoutineByIdPage() {
       ttsText: newItemLabel.trim(),
       category: 'other',
       order: currentItems.length + 1,
+      timerSeconds: 180, // 개인 루틴 추가 항목 기본 3분
     };
     addItem(activeSlot, item);
     setNewItemLabel('');
   };
 
-  if (!id || !profile || !isPersonalProfile(profile)) {
+  if (!id || !profile || !canUsePersonal) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <p className="text-gray-500">이동 중...</p>
@@ -213,7 +224,7 @@ export default function PersonalRoutineByIdPage() {
                 >
                   {item.label}
                 </span>
-                <span className="text-gray-400 text-sm">{item.icon}</span>
+                <RoutineItemIcon item={item} className="w-8 h-8 text-gray-400 text-sm" imageClassName="w-6 h-6 object-contain" />
                 <button
                   type="button"
                   onClick={() => removeItem(activeSlot, item.id)}
