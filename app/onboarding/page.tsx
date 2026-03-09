@@ -12,18 +12,18 @@ export default function OnboardingPage() {
   const router = useRouter()
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#FFF0F5] to-[#F0FFF8] flex flex-col items-center justify-center px-6">
-      {/* 가족 사진 (단일 이미지) */}
+    <div className="min-h-screen bg-gradient-to-b from-[#FFF0F5] to-[#F0FFF8] flex flex-col items-center px-6 py-6 sm:py-8">
+      {/* 가족 사진 — 텍스트와 가깝게 배치해 한 화면에 두 블록이 모두 보이도록 */}
       <motion.div
         initial={{ scale: 0.8, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: 'spring', stiffness: 200 }}
-        className="flex justify-center mb-8"
+        className="flex justify-center mb-0 p-0"
       >
         <img
           src="/profile/family.png"
           alt="가족"
-          className="w-80 h-80 object-contain"
+          className="w-56 h-56 sm:w-64 sm:h-64 object-contain p-0 block"
         />
       </motion.div>
 
@@ -31,24 +31,24 @@ export default function OnboardingPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
-        className="text-center mb-10"
+        className="text-center mb-5"
       >
         <p className="text-sm text-gray-500 mb-1">아이의 미래를 밝혀주는</p>
-        <h1 className="text-3xl font-black text-gray-700">자기주도 습관형성 프로젝트!</h1>
+        <h1 className="text-2xl sm:text-3xl font-black text-gray-700">자기주도 습관형성 프로젝트!</h1>
       </motion.div>
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.35 }}
-        className="w-full flex flex-col gap-4"
+        className="w-full flex flex-col gap-3 max-w-md"
       >
         {/* 우리아이 루틴 블록 */}
         <motion.button
           type="button"
           whileTap={{ scale: 0.97 }}
           onClick={() => router.push('/onboarding/child')}
-          className="w-full bg-gradient-to-r from-[#FF8FAB] to-[#FFD93D] rounded-3xl p-6 text-left shadow-lg"
+          className="w-full bg-gradient-to-r from-[#FF8FAB] to-[#FFD93D] rounded-3xl p-5 text-left shadow-lg"
         >
           <div className="flex items-center gap-4">
             <div className="flex -space-x-2">
@@ -68,7 +68,7 @@ export default function OnboardingPage() {
               <p className="text-white/80 text-sm">유치원 · 어린이집 · 초등학생</p>
             </div>
           </div>
-          <div className="flex gap-2 mt-3">
+          <div className="flex gap-2 mt-2">
             <span className="bg-white/30 text-white text-xs font-bold px-3 py-1 rounded-full">미취학 아동</span>
             <span className="bg-white/30 text-white text-xs font-bold px-3 py-1 rounded-full">학령기 자녀</span>
           </div>
@@ -79,7 +79,7 @@ export default function OnboardingPage() {
           type="button"
           whileTap={{ scale: 0.97 }}
           onClick={() => router.push('/onboarding/parent')}
-          className="w-full bg-gradient-to-r from-[#7EB8D4] to-[#A8E6CF] rounded-3xl p-6 text-left shadow-lg"
+          className="w-full bg-gradient-to-r from-[#7EB8D4] to-[#A8E6CF] rounded-3xl p-5 text-left shadow-lg"
         >
           <div className="flex items-center gap-4">
             <div className="flex -space-x-2">
@@ -99,7 +99,7 @@ export default function OnboardingPage() {
               <p className="text-white/80 text-sm">엄마 · 아빠의 하루 루틴 관리</p>
             </div>
           </div>
-          <div className="flex gap-2 mt-3">
+          <div className="flex gap-2 mt-2">
             <span className="bg-white/30 text-white text-xs font-bold px-3 py-1 rounded-full">엄마</span>
             <span className="bg-white/30 text-white text-xs font-bold px-3 py-1 rounded-full">아빠</span>
           </div>

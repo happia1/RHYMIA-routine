@@ -6,16 +6,18 @@
  * 알림 페이지 "자녀 루틴 확인"에서 ?childId= 로 특정 자녀를 지정할 수 있어요.
  */
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, CheckCircle2, XCircle } from 'lucide-react'
 import { useKidRoutineStore, selectRoutines } from '@/lib/stores/kidRoutineStore'
 import { useProfileStore } from '@/lib/stores/profileStore'
 import { usePetStore } from '@/lib/stores/petStore'
+import { GiveStickerPanel } from '@/components/parent/GiveStickerPanel'
 import confetti from 'canvas-confetti'
 
-export default function ParentDashboardPage() {
+/** useSearchParams()를 쓰는 실제 대시보드 내용 — Suspense 경계 안에서만 렌더링됩니다 */
+function ParentDashboardContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { getChildProfiles } = useProfileStore()
@@ -83,16 +85,19 @@ export default function ParentDashboardPage() {
     <div className="min-h-screen bg-[#FFF9F0] pb-24">
       <div className="sticky top-0 bg-[#FFF9F0]/95 backdrop-blur-sm px-5 py-4 z-10">
         <div className="flex items-center gap-3">
-          <button onClick={() => router.back()}
-            className="w-10 h-10 rounded-full bg-white shadow flex items-center justify-center">
+          <button type="button" onClick={() => router.back()}
+            className="w-10 h-10 rounded-full bg-white shadow flex items-center justify-center flex-shrink-0">
             <ArrowLeft className="w-5 h-5 text-gray-600" />
           </button>
-          <div>
+          <div className="flex-1 min-w-0">
             <p className="font-black text-gray-700 text-lg">{childName}의 오늘 루틴</p>
             <p className="text-xs text-gray-400">
               {completedCount}/{totalCount} 완료
               {pendingCount > 0 && <span className="text-amber-400 ml-2">· {pendingCount}개 확인 대기</span>}
             </p>
+          </div>
+          <div className="flex-shrink-0">
+            <GiveStickerPanel compact selectedChild={selectedChild ?? null} />
           </div>
         </div>
 
@@ -198,5 +203,20 @@ export default function ParentDashboardPage() {
         )}
       </div>
     </div>
+  )
+}
+
+/** 페이지 기본 내보내기: useSearchParams 사용 구간을 Suspense로 감싸 빌드/프리렌더 오류를 방지합니다 */
+export default function ParentDashboardPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#FFF9F0] flex items-center justify-center">
+          <div className="text-4xl animate-bounce">🌸</div>
+        </div>
+      }
+    >
+      <ParentDashboardContent />
+    </Suspense>
   )
 }

@@ -35,3 +35,4 @@ Thumbs.db
 # 5. 로컬 데이터 저장소 (테스트용 JSON 데이터 등)
 data/*.json
 !data/example.json
+.vercel

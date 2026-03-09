@@ -19,7 +19,8 @@ export default function RoutinePage() {
       router.replace('/')
       return
     }
-    if (active.role === 'child_preschool') {
+    // 미취학·학령기 자녀 모두 같은 아이 루틴 보드(/routine/kid) 사용
+    if (active.role === 'child_preschool' || active.role === 'child_school') {
       router.replace('/routine/kid')
     } else {
       router.replace('/routine/personal')

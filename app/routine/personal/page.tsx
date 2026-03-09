@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, Check, Baby } from 'lucide-react'
+import { Plus, Trash2, Check } from 'lucide-react'
 import { usePersonalRoutineStore } from '@/lib/stores/personalRoutineStore'
 import { useProfileStore } from '@/lib/stores/profileStore'
 import { DonutClock } from '@/components/personal/DonutClock'
@@ -23,8 +23,7 @@ export default function PersonalRoutinePage() {
     toggleComplete,
     getSortedSlots,
   } = usePersonalRoutineStore()
-  const { getActiveProfile, getChildProfiles } = useProfileStore()
-  const children = getChildProfiles()
+  const { getActiveProfile } = useProfileStore()
   const profile = getActiveProfile()
   const [mounted, setMounted] = useState(false)
 
@@ -40,15 +39,11 @@ export default function PersonalRoutinePage() {
 
   useEffect(() => setMounted(true), [])
 
-  // 프로필에 따라 리다이렉트: 미취학/학령기 자녀는 각각 /routine/kid, /personal/[id]
+  // 프로필에 따라 리다이렉트: 미취학·학령기 자녀는 같은 아이 루틴 보드로
   useEffect(() => {
     if (!mounted || !profile?.id) return
-    if (profile.role === 'child_preschool') {
+    if (profile.role === 'child_preschool' || profile.role === 'child_school') {
       router.replace('/routine/kid')
-      return
-    }
-    if (profile.role === 'child_school') {
-      router.replace(`/personal/${profile.id}`)
       return
     }
   }, [mounted, profile?.id, profile?.role, router])
@@ -79,6 +74,15 @@ export default function PersonalRoutinePage() {
   const formatTime = (h: number, m: number) =>
     `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 
+  // 마운트 전에는 서버와 동일한 로딩 UI만 렌더 (하이드레이션 불일치 방지)
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-[#FFF9F0] flex items-center justify-center">
+        <div className="text-4xl animate-pulse">🌟</div>
+      </div>
+    )
+  }
+
   if (!profile || !isPersonalProfile(profile)) {
     return (
       <div className="min-h-screen bg-[#FFF9F0] flex items-center justify-center">
@@ -89,25 +93,10 @@ export default function PersonalRoutinePage() {
 
   return (
     <div className="min-h-screen bg-white pb-28">
-      {/* 헤더: 날짜 + 자녀 루틴 확인 (하단 독바 알림 탭에서 자녀 루틴 확인 가능) */}
-      <div className="px-5 pt-6 pb-3 flex items-center justify-between">
-        <div>
-          <p className="text-xs text-gray-400">오늘</p>
-          <p className="text-xl font-black text-gray-800">{dateLabel}</p>
-        </div>
-        {children.length > 0 && (
-          <motion.button
-            type="button"
-            whileTap={{ scale: 0.9 }}
-            onClick={() => router.push('/routine/parent-dashboard')}
-            className="flex items-center gap-1.5 bg-[#FFF0F5] px-3 py-2 rounded-2xl border border-pink-100"
-          >
-            <Baby className="w-4 h-4 text-[#FF8FAB]" />
-            <span className="text-xs font-black text-[#FF8FAB]">
-              {children[0].name}
-            </span>
-          </motion.button>
-        )}
+      {/* 헤더: 날짜 (자녀 루틴 확인은 알림 탭에서 진입) */}
+      <div className="px-5 pt-6 pb-3">
+        <p className="text-xs text-gray-400">오늘</p>
+        <p className="text-xl font-black text-gray-800">{dateLabel}</p>
       </div>
 
       {/* 도넛 차트 (자유 슬롯 기반) */}

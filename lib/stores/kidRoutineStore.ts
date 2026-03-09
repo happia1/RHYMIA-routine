@@ -6,8 +6,9 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { RoutineTemplate, RoutineLog, RewardPoints, POINT_RULES, type RoutineItem } from '@/types/routine'
-import { ALL_DEFAULT_KID_ROUTINES, ALL_DEFAULT_SCHOOL_KID_ROUTINES, ROUTINE_IMAGES, LABEL_TO_IMAGE_KEY } from '@/lib/utils/defaultRoutines'
+import { ALL_DEFAULT_KID_ROUTINES, ROUTINE_IMAGES, LABEL_TO_IMAGE_KEY } from '@/lib/utils/defaultRoutines'
 import type { ProfileRole } from '@/types/profile'
+import { usePetStore } from '@/lib/stores/petStore'
 
 /** 탭 키 (프로필 기반 페이지에서 아침/저녁/주말 구분용) */
 export type RoutineTabType = 'morning' | 'evening' | 'weekend'
@@ -164,8 +165,12 @@ export const useKidRoutineStore = create<KidRoutineState>()(
           const by = { ...get().byProfile }
           const current = by[pid] ?? defaultProfileData()
           let nextRoutines = current.routines
-          if (nextRoutines.length === 0) {
-            nextRoutines = role === 'child_school' ? ALL_DEFAULT_SCHOOL_KID_ROUTINES : ALL_DEFAULT_KID_ROUTINES
+          const isOldSchoolDefaults =
+            nextRoutines.length > 0 &&
+            nextRoutines.some((r) => r.id === 'default-school-morning' || r.id === 'default-school-evening')
+          // 미취학·학령기 동일한 루틴 보드(카드) 사용. 학령기 전용 수정은 이후 요청 반영.
+          if (nextRoutines.length === 0 || (role === 'child_school' && isOldSchoolDefaults)) {
+            nextRoutines = ALL_DEFAULT_KID_ROUTINES
           } else {
             nextRoutines = nextRoutines.map((r) => ({
               ...r,
@@ -234,6 +239,8 @@ export const useKidRoutineStore = create<KidRoutineState>()(
             byProfile: by,
             sessionCompletedItems: newCompleted,
           })
+          // 미션 1개 완료 시 펫 먹이 1개 적립 (캐릭터 성장용)
+          usePetStore.getState().addFood(1)
         },
 
         completeItemForRoutine: (routineId, itemId) => {
@@ -285,6 +292,8 @@ export const useKidRoutineStore = create<KidRoutineState>()(
             },
           }
           set({ byProfile: by })
+          // 미션 1개 완료 시 펫 먹이 1개 적립 (캐릭터 성장용)
+          usePetStore.getState().addFood(1)
         },
 
         setRoutines: (templates, forProfileId) => {

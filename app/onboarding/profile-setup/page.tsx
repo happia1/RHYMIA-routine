@@ -1,11 +1,13 @@
 /**
  * 프로필 설정 — 이름·아바타·(자녀) 기관·시간
  * 비개발자: 역할 선택 후 이름·이모지·색상·(자녀 시) 다니는 곳·집 나서는/등원/하원 시간을 입력하고 완료하면 해당 루틴 화면으로 이동해요.
+ * useSearchParams()는 Next.js에서 Suspense 경계 안에서만 사용할 수 있어서, 실제 UI는 ProfileSetupContent로 분리하고
+ * 페이지에서는 Suspense로 감싸 로딩 중일 때 fallback(🐣)을 보여줍니다.
  */
 
 'use client'
 
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Check } from 'lucide-react'
@@ -15,6 +17,7 @@ import { useOnboardingStore } from '@/lib/stores/onboardingStore'
 import { ProfileImagePicker } from '@/components/profile/ProfileImagePicker'
 import { ProfileRole, ROLE_META, AVATAR_COLORS } from '@/types/profile'
 
+/** 역할별 아바타 이모지 목록 (비개발자: 프로필에서 선택할 수 있는 이모지들) */
 const AVATAR_EMOJIS: Record<string, string[]> = {
   child_preschool: ['🧒', '👦', '👧', '🐣', '🐥', '🌱', '⭐', '🌟'],
   child_school: ['🎒', '📚', '🏃', '⚽', '🎨', '🎮', '🌈', '🦋'],
@@ -22,13 +25,18 @@ const AVATAR_EMOJIS: Record<string, string[]> = {
   dad: ['👨', '👨‍💼', '👨‍🍳', '🏋️', '👨‍💻', '⚽', '🎸', '🧩'],
 }
 
+/** 자녀가 다니는 기관 타입 (유치원/어린이집/초등학교) 및 기본 등하원 시간 */
 const INSTITUTION_TYPES = [
   { value: 'kindergarten' as const, label: '유치원', emoji: '🏫', arrivalDefault: '09:00', departureDefault: '08:20' },
   { value: 'daycare' as const, label: '어린이집', emoji: '🏡', arrivalDefault: '09:30', departureDefault: '09:00' },
   { value: 'elementary' as const, label: '초등학교', emoji: '🎒', arrivalDefault: '08:40', departureDefault: '08:10' },
 ]
 
-export default function ProfileSetupPage() {
+/**
+ * 프로필 설정 화면 본문 (useSearchParams 사용)
+ * URL 쿼리 ?role= 에서 역할(엄마/아빠/유치원/학령기)을 읽어와서 폼을 구성합니다.
+ */
+function ProfileSetupContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const childRole = useOnboardingStore((s) => s.childRole)
@@ -334,5 +342,24 @@ export default function ProfileSetupPage() {
         프로필 만들기 완료!
       </motion.button>
     </div>
+  )
+}
+
+/**
+ * 프로필 설정 페이지 (Next.js 라우트)
+ * useSearchParams를 쓰는 ProfileSetupContent를 Suspense로 감싸서,
+ * 쿼리 파라미터가 준비되기 전에는 로딩 UI(🐣)를 보여줍니다.
+ */
+export default function ProfileSetupPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#FFF9F0] flex items-center justify-center">
+          <div className="text-4xl animate-bounce">🐣</div>
+        </div>
+      }
+    >
+      <ProfileSetupContent />
+    </Suspense>
   )
 }

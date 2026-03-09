@@ -107,6 +107,26 @@ export default function KidRoutineMainPage() {
       {/* 등원까지 남은 시간 카운트다운 (자녀 프로필 + 출발 시간 설정 시에만 표시) */}
       <DepartureBanner />
 
+      {/* 칭찬 스티커 · 우리 친구 바로가기 */}
+      <div className="flex gap-3 mb-6">
+        <motion.button
+          whileTap={{ scale: 0.97 }}
+          onClick={() => router.push('/routine/kid/sticker')}
+          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-white border-2 border-[#FFD93D] shadow-sm"
+        >
+          <span className="text-2xl">⭐</span>
+          <span className="text-sm font-black text-gray-700">칭찬 스티커</span>
+        </motion.button>
+        <motion.button
+          whileTap={{ scale: 0.97 }}
+          onClick={() => router.push('/routine/kid/pet')}
+          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-white border-2 border-[#A8E6CF] shadow-sm"
+        >
+          <span className="text-2xl">🐾</span>
+          <span className="text-sm font-black text-gray-700">우리 친구</span>
+        </motion.button>
+      </div>
+
       {/* 루틴 카드 목록 (아침/저녁/주말 등) */}
       <div className="flex flex-col gap-4">
         {todayRoutines.map((routine, idx) => {
