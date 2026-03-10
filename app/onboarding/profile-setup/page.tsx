@@ -15,7 +15,10 @@ import { useProfileStore } from '@/lib/stores/profileStore'
 import { useKidRoutineStore } from '@/lib/stores/kidRoutineStore'
 import { useOnboardingStore } from '@/lib/stores/onboardingStore'
 import { ProfileImagePicker } from '@/components/profile/ProfileImagePicker'
-import { ProfileRole, ROLE_META, AVATAR_COLORS } from '@/types/profile'
+import { ProfileRole, ROLE_META } from '@/types/profile'
+
+/** 프로필 배경용 기본 색상 (배경 색상 선택 기능 제거 후 고정값) */
+const DEFAULT_AVATAR_COLOR = '#FF8FAB'
 
 /** 역할별 아바타 이모지 목록 (비개발자: 프로필에서 선택할 수 있는 이모지들) */
 const AVATAR_EMOJIS: Record<string, string[]> = {
@@ -56,7 +59,6 @@ function ProfileSetupContent() {
 
   const [name, setName] = useState('')
   const [selectedEmoji, setSelectedEmoji] = useState(meta?.emoji ?? availableEmojis[0])
-  const [selectedColor, setSelectedColor] = useState(AVATAR_COLORS[0])
   const [customPhotoBase64, setCustomPhotoBase64] = useState<string | null>(null)
   const [institutionType, setInstitutionType] = useState<'kindergarten' | 'daycare' | 'elementary' | null>(null)
   const [wakeTime, setWakeTime] = useState('07:00')
@@ -146,30 +148,13 @@ function ProfileSetupContent() {
                     : null
           }
           fallbackEmoji={selectedEmoji}
-          avatarColor={selectedColor}
+          avatarColor={DEFAULT_AVATAR_COLOR}
           onSave={(base64) => setCustomPhotoBase64(base64)}
           size={100}
         />
         <p className="text-xs text-gray-400 mt-3">
           {customPhotoBase64 ? '✅ 사진 업로드 완료' : isParent ? '선택한 프로필 사진이 적용돼요' : '아이콘을 눌러 사진을 추가해요'}
         </p>
-      </div>
-
-      <div className="mb-6">
-        <p className="text-xs text-gray-400 font-semibold mb-2 text-center">배경 색상</p>
-        <div className="flex justify-center gap-3">
-          {AVATAR_COLORS.map((color) => (
-            <motion.button
-              key={color}
-              whileTap={{ scale: 0.9 }}
-              onClick={() => setSelectedColor(color)}
-              className={`w-8 h-8 rounded-full transition-all ${
-                selectedColor === color ? 'scale-125 ring-2 ring-offset-2 ring-gray-400' : ''
-              }`}
-              style={{ backgroundColor: color }}
-            />
-          ))}
-        </div>
       </div>
 
       <div className="mb-6">
