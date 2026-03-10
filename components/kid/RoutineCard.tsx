@@ -87,15 +87,6 @@ export function RoutineCard({ item, isCompleted, isPending, onComplete }: Routin
             >
               {item.label}
             </p>
-            {isPending && (
-              <motion.p
-                className="text-xs text-amber-500 font-semibold mt-1"
-                animate={{ opacity: [1, 0.4, 1] }}
-                transition={{ repeat: Infinity, duration: 1.2 }}
-              >
-                ⏳ 엄마/아빠 확인 중...
-              </motion.p>
-            )}
             {/* 타이머 표시 (timerEnabled인 미션만) */}
             {item.timerEnabled && item.timerSeconds > 0 && !isPending && (
               <p className="text-xs text-[#FF8FAB] font-semibold mt-1">

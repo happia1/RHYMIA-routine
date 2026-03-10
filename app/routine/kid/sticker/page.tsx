@@ -1,34 +1,30 @@
 'use client'
 
 /**
- * 칭찬 스티커 탭 — 여행 지도 / 스티커함 / 마일스톤 미리보기
- * 비개발자: 아이가 "칭찬 스티커" 메뉴에 들어오면 현재 위치, 여행 지도, 받은 스티커함, 마일스톤 목록을 볼 수 있어요.
+ * 칭찬 스티커 — 여행 지도 / 스티커함
+ * 비개발자: 아이가 "칭찬 스티커" 메뉴에 들어오면 현재 위치, 여행 지도, 받은 스티커함을 볼 수 있어요. 마일스톤은 루틴 페이지의 마일스톤 블록에서 들어가요.
  */
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Map, Star, Trophy } from 'lucide-react'
+import { ArrowLeft, Map, Star } from 'lucide-react'
 import { useStickerStore } from '@/lib/stores/stickerStore'
-import { useMilestoneStore } from '@/lib/stores/milestoneStore'
 import { useProfileStore } from '@/lib/stores/profileStore'
 import { StickerMap } from '@/components/sticker/StickerMap'
 import { MAP_TILES } from '@/types/sticker'
 
-type Tab = 'map' | 'stickers' | 'milestone'
+type Tab = 'map' | 'stickers'
 
 export default function StickerPage() {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('map')
-  const { inbox, currentMapPosition, achievedCheckpoints } = useStickerStore()
-  const { getMilestones } = useMilestoneStore()
   const activeProfile = useProfileStore((s) => s.getActiveProfile())
-  const profileId = activeProfile?.id ?? null
-
-  // 마일스톤은 부모가 "칭찬 스티커 주기" 마일스톤 탭에서 풀을 보고 추가한 것만 표시됩니다 (자동 전체 초기화 없음).
-  const milestones = getMilestones(profileId)
+  const profileId = activeProfile?.id ?? ''
+  // 현재 선택된 자녀(프로필) 기준으로 스티커함·지도 상태 표시 (프로필별 분리)
+  const getStateForProfile = useStickerStore((s) => s.getStateForProfile)
+  const { inbox, currentMapPosition, achievedCheckpoints } = getStateForProfile(profileId)
   const unplacedCount = inbox.length
-  const achievedMilestones = milestones.filter((m) => m.isAchieved).length
   const currentTile = MAP_TILES[currentMapPosition]
 
   return (
@@ -84,11 +80,6 @@ export default function StickerPage() {
             label:
               `스티커함${unplacedCount > 0 ? ` (${unplacedCount})` : ''}`,
           },
-          {
-            key: 'milestone',
-            icon: Trophy,
-            label: `마일스톤 ${achievedMilestones}/${milestones.length}`,
-          },
         ].map(({ key, icon: Icon, label }) => (
           <motion.button
             key={key}
@@ -107,7 +98,7 @@ export default function StickerPage() {
       </div>
 
       <div className="px-5">
-        {tab === 'map' && <StickerMap />}
+        {tab === 'map' && <StickerMap profileId={profileId} />}
 
         {tab === 'stickers' && (
           <div>
@@ -142,59 +133,6 @@ export default function StickerPage() {
                 ))}
               </div>
             )}
-          </div>
-        )}
-
-        {tab === 'milestone' && (
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-sm text-gray-400">
-                도전해볼 미션이에요! 해내면 스티커를 받아요 🏆
-              </p>
-              <button
-                onClick={() => router.push('/routine/kid/milestone')}
-                className="text-xs font-black text-[#FF8FAB] bg-[#FFF0F5] px-2.5 py-1 rounded-full"
-              >
-                전체보기
-              </button>
-            </div>
-            <div className="flex flex-col gap-3">
-              {milestones.slice(0, 5).map((ms) => (
-                <div
-                  key={ms.id}
-                  className={`flex items-center gap-4 bg-white rounded-2xl p-4 shadow-sm border-2 ${
-                    ms.isAchieved
-                      ? 'border-[#A8E6CF] opacity-60'
-                      : 'border-gray-100'
-                  }`}
-                >
-                  <div className="w-14 h-14 rounded-2xl overflow-hidden bg-[#FFF9F0] flex items-center justify-center flex-shrink-0">
-                    {ms.imagePath ? (
-                      <img
-                        src={ms.imagePath}
-                        alt={ms.title}
-                        className="w-full h-full object-contain p-1"
-                      />
-                    ) : (
-                      <span className="text-2xl">🎯</span>
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <p
-                      className={`font-black text-gray-700 ${ms.isAchieved ? 'line-through' : ''}`}
-                    >
-                      {ms.title}
-                    </p>
-                    <p className="text-xs text-gray-400">{ms.description}</p>
-                  </div>
-                  {ms.isAchieved ? (
-                    <span className="text-2xl">✅</span>
-                  ) : (
-                    <span className="text-xl text-gray-200">○</span>
-                  )}
-                </div>
-              ))}
-            </div>
           </div>
         )}
       </div>

@@ -9,7 +9,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useProfileStore } from '@/lib/stores/profileStore'
 import { useRouter } from 'next/navigation'
-import { Plus, X, Trash2, Pencil } from 'lucide-react'
+import { Plus, X, Trash2, Pencil, Settings } from 'lucide-react'
 import { ROLE_META, getProfileImageSrc, type ProfileRole } from '@/types/profile'
 import { ProfileEditSheet } from '@/components/profile/ProfileEditSheet'
 
@@ -68,6 +68,15 @@ export function ProfileSwitchSheet({ isOpen, onClose }: ProfileSwitchSheetProps)
     router.push('/onboarding')
   }
 
+  /** 자녀 프로필 설정: 이름·시간 등 전체 수정 페이지로 이동 (자녀만 해당) */
+  const handleSettings = (e: React.MouseEvent, profile: (typeof profiles)[0]) => {
+    e.stopPropagation()
+    const isChild = profile.role === 'child_preschool' || profile.role === 'child_school'
+    if (!isChild) return
+    onClose()
+    router.push(`/profile/child/${profile.id}`)
+  }
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -106,7 +115,7 @@ export function ProfileSwitchSheet({ isOpen, onClose }: ProfileSwitchSheetProps)
                     key={profile.id}
                     whileTap={{ scale: 0.97 }}
                     className={`
-                      flex items-center gap-4 p-4 rounded-2xl text-left transition-all
+                      flex items-center gap-3 p-4 rounded-2xl text-left transition-all
                       ${isActive
                         ? 'border-2 border-[#FF8FAB] bg-pink-50'
                         : 'border-2 border-gray-100 bg-gray-50'
@@ -116,7 +125,7 @@ export function ProfileSwitchSheet({ isOpen, onClose }: ProfileSwitchSheetProps)
                     <button
                       type="button"
                       onClick={() => handleSelect(profile.id)}
-                      className="flex items-center gap-4 flex-1 min-w-0"
+                      className="flex items-center gap-3 flex-1 min-w-0"
                     >
                       <div
                         className="w-14 h-14 rounded-2xl overflow-hidden flex items-center justify-center text-3xl flex-shrink-0 shadow-sm"
@@ -132,7 +141,7 @@ export function ProfileSwitchSheet({ isOpen, onClose }: ProfileSwitchSheetProps)
                           profile.avatarEmoji || '👤'
                         )}
                       </div>
-                      <div className="flex-1 min-w-0">
+                      <div className="flex-1 min-w-0 text-left">
                         <p className="font-black text-gray-700">{profile.name}</p>
                         <p className="text-xs text-gray-400">{label}</p>
                       </div>
@@ -140,6 +149,7 @@ export function ProfileSwitchSheet({ isOpen, onClose }: ProfileSwitchSheetProps)
                         <div className="w-3 h-3 rounded-full bg-[#FF8FAB] flex-shrink-0" />
                       )}
                     </button>
+                    {/* 수정(사진) · 설정(자녀 전체 수정) · 삭제 — 나란히 배치 */}
                     <button
                       type="button"
                       onClick={(e) => {
@@ -147,10 +157,20 @@ export function ProfileSwitchSheet({ isOpen, onClose }: ProfileSwitchSheetProps)
                         setEditProfile(profile)
                       }}
                       className="p-2 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors flex-shrink-0"
-                      title="프로필 사진 변경"
+                      title="프로필 사진 수정"
                     >
                       <Pencil className="w-5 h-5" />
                     </button>
+                    {(profile.role === 'child_preschool' || profile.role === 'child_school') && (
+                      <button
+                        type="button"
+                        onClick={(e) => handleSettings(e, profile)}
+                        className="p-2 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors flex-shrink-0"
+                        title="프로필 설정"
+                      >
+                        <Settings className="w-5 h-5" />
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={(e) => handleDelete(e, profile.id)}

@@ -9,19 +9,30 @@ import { RoutineTemplate, RoutineLog, RewardPoints, POINT_RULES, type RoutineIte
 import { ALL_DEFAULT_KID_ROUTINES, ROUTINE_IMAGES, LABEL_TO_IMAGE_KEY } from '@/lib/utils/defaultRoutines'
 import type { ProfileRole } from '@/types/profile'
 import { usePetStore } from '@/lib/stores/petStore'
+import { useProfileStore } from '@/lib/stores/profileStore'
+import { useNotificationStore } from '@/lib/stores/notificationStore'
 
 /** 탭 키 (프로필 기반 페이지에서 아침/저녁/주말 구분용) */
 export type RoutineTabType = 'morning' | 'evening' | 'weekend'
+
+/** 확인 대기 중인 항목 (루틴별·항목별) — 접속해도 유지되도록 프로필에 저장 */
+export interface PendingConfirmEntry {
+  routineId: string
+  itemId: string
+}
 
 /** 프로필 하나의 루틴 데이터 (프로필별로 따로 저장) */
 export interface ProfileRoutineData {
   routines: RoutineTemplate[]
   logs: RoutineLog[]
+  pendingConfirms: PendingConfirmEntry[]
   rewardPoints: RewardPoints
   rewardShownDates: string[]
   wakeAlarmTime: string
   alarmEnabled: boolean
   lastAlarmDismissedDate: string | null
+  /** 루틴별로 삭제된 항목 템플릿 (항목 추가 시 다시 넣을 수 있도록) routineId -> RoutineItem[] */
+  deletedItemTemplates?: Record<string, RoutineItem[]>
 }
 
 /** 프로필별 훅이 반환하는 완료 현황 */
@@ -60,11 +71,13 @@ function defaultProfileData(): ProfileRoutineData {
   return {
     routines: [],
     logs: [],
+    pendingConfirms: [],
     rewardPoints: { ...defaultRewardPoints },
     rewardShownDates: [],
     wakeAlarmTime: '07:00',
     alarmEnabled: true,
     lastAlarmDismissedDate: null,
+    deletedItemTemplates: {},
   }
 }
 
@@ -97,11 +110,20 @@ interface KidRoutineState {
   getActiveRoutine: () => RoutineTemplate | undefined
   getCompletionRate: (routineId: string) => number
   getCompletionRateForProfile: (profileId: string, routineId: string) => number
+  getPendingConfirmItemsForProfile: (profileId: string) => string[]
   applyTimerSettings: (timers: Record<string, number>) => void
   checkAndReset: () => void
   setWakeAlarmTime: (time: string) => void
+  /** 지정한 프로필의 기상 알람 시간만 변경 (자녀 프로필 수정 시 사용) */
+  setWakeAlarmTimeForProfile: (profileId: string, time: string) => void
   setAlarmEnabled: (enabled: boolean) => void
   dismissAlarm: () => void
+  /** 삭제한 항목을 해당 루틴의 "항목 추가" 풀에 넣어서 나중에 다시 추가 가능하게 */
+  addDeletedItemTemplate: (profileId: string, routineId: string, item: RoutineItem) => void
+  /** 루틴별 삭제 풀에 있는 템플릿 목록 (항목 추가 시트에 표시) */
+  getDeletedItemTemplates: (profileId: string, routineId: string) => RoutineItem[]
+  /** 항목 추가로 다시 넣었을 때 삭제 풀에서 하나 제거 (같은 라벨) */
+  removeDeletedItemTemplate: (profileId: string, routineId: string, label: string) => void
 }
 
 const today = () => new Date().toISOString().split('T')[0]
@@ -152,11 +174,49 @@ export const useKidRoutineStore = create<KidRoutineState>()(
         setWakeAlarmTime: (time) => {
           setProfileData((p) => ({ ...p, wakeAlarmTime: time }))
         },
+        setWakeAlarmTimeForProfile: (profileId, time) => {
+          const by = { ...get().byProfile }
+          const current = by[profileId] ?? defaultProfileData()
+          by[profileId] = { ...current, wakeAlarmTime: time }
+          set({ byProfile: by })
+        },
         setAlarmEnabled: (enabled) => {
           setProfileData((p) => ({ ...p, alarmEnabled: enabled }))
         },
         dismissAlarm: () => {
           setProfileData((p) => ({ ...p, lastAlarmDismissedDate: today() }))
+        },
+
+        addDeletedItemTemplate: (profileId, routineId, item) => {
+          const by = { ...get().byProfile }
+          const current = by[profileId] ?? defaultProfileData()
+          const templates = { ...(current.deletedItemTemplates ?? {}) }
+          const list = [...(templates[routineId] ?? [])]
+          const template = { ...item, id: '', order: 0 }
+          list.push(template)
+          templates[routineId] = list
+          by[profileId] = { ...current, deletedItemTemplates: templates }
+          set({ byProfile: by })
+        },
+
+        getDeletedItemTemplates: (profileId, routineId) => {
+          const current = get().byProfile[profileId] ?? defaultProfileData()
+          return current.deletedItemTemplates?.[routineId] ?? []
+        },
+
+        removeDeletedItemTemplate: (profileId, routineId, label) => {
+          const by = { ...get().byProfile }
+          const current = by[profileId] ?? defaultProfileData()
+          const templates = { ...(current.deletedItemTemplates ?? {}) }
+          const list = templates[routineId] ?? []
+          const idx = list.findIndex((t) => (t.label ?? '').trim() === (label ?? '').trim())
+          if (idx >= 0) {
+            const next = list.slice(0, idx).concat(list.slice(idx + 1))
+            if (next.length) templates[routineId] = next
+            else delete templates[routineId]
+          }
+          by[profileId] = { ...current, deletedItemTemplates: templates }
+          set({ byProfile: by })
         },
 
         initRoutines: (role) => {
@@ -183,9 +243,15 @@ export const useKidRoutineStore = create<KidRoutineState>()(
 
         setActiveRoutine: (routineId) => {
           const log = get().getTodayLog(routineId)
+          const pid = get().currentProfileId
+          const data = pid ? get().byProfile[pid] ?? defaultProfileData() : defaultProfileData()
+          const pendingForRoutine = (data.pendingConfirms ?? [])
+            .filter((p) => p.routineId === routineId)
+            .map((p) => p.itemId)
           set({
             activeRoutineId: routineId,
             sessionCompletedItems: log?.completedItems ?? [],
+            pendingConfirmItems: pendingForRoutine,
           })
         },
 
@@ -239,8 +305,8 @@ export const useKidRoutineStore = create<KidRoutineState>()(
             byProfile: by,
             sessionCompletedItems: newCompleted,
           })
-          // 미션 1개 완료 시 펫 먹이 1개 적립 (캐릭터 성장용)
-          usePetStore.getState().addFood(1)
+          // 미션 1개 완료 시 해당 프로필의 펫에게 먹이 1개 적립 (프로필별 분리)
+          if (currentProfileId) usePetStore.getState().addFood(currentProfileId, 1)
         },
 
         completeItemForRoutine: (routineId, itemId) => {
@@ -292,8 +358,8 @@ export const useKidRoutineStore = create<KidRoutineState>()(
             },
           }
           set({ byProfile: by })
-          // 미션 1개 완료 시 펫 먹이 1개 적립 (캐릭터 성장용)
-          usePetStore.getState().addFood(1)
+          // 미션 1개 완료 시 해당 프로필의 펫에게 먹이 1개 적립 (프로필별 분리)
+          if (pid) usePetStore.getState().addFood(pid, 1)
         },
 
         setRoutines: (templates, forProfileId) => {
@@ -305,10 +371,30 @@ export const useKidRoutineStore = create<KidRoutineState>()(
           set({ byProfile: by })
         },
 
+        /** 아이가 "했어요" 버튼을 눌렀을 때: 확인 대기를 프로필에 저장(접속해도 유지) + 부모 알림 추가 */
         requestConfirm: (itemId) => {
-          const { pendingConfirmItems } = get()
+          const { pendingConfirmItems, currentProfileId, activeRoutineId } = get()
           if (pendingConfirmItems.includes(itemId)) return
-          set({ pendingConfirmItems: [...pendingConfirmItems, itemId] })
+          if (!currentProfileId || !activeRoutineId) return
+
+          const by = { ...get().byProfile }
+          const current = by[currentProfileId] ?? defaultProfileData()
+          const pendingConfirms = [...(current.pendingConfirms ?? []), { routineId: activeRoutineId, itemId }]
+          by[currentProfileId] = { ...current, pendingConfirms }
+          set({ byProfile: by, pendingConfirmItems: [...pendingConfirmItems, itemId] })
+
+          const routine = get().getActiveRoutine()
+          const item = routine?.items.find((i) => i.id === itemId)
+          const profile = useProfileStore.getState().getProfile(currentProfileId)
+          const childName = profile?.name ?? '우리 아이'
+          const childEmoji = profile?.avatarEmoji ?? '🧒'
+          useNotificationStore.getState().addNotification({
+            fromName: childName,
+            fromEmoji: childEmoji,
+            content: `${item?.label ?? '미션'} 완료했어요! 확인해주세요`,
+            type: 'child_mission',
+            childProfileId: currentProfileId,
+          })
         },
 
         parentApprove: (itemId) => {
@@ -317,15 +403,38 @@ export const useKidRoutineStore = create<KidRoutineState>()(
           set({ pendingConfirmItems: pendingConfirmItems.filter((id) => id !== itemId) })
         },
 
-        /** 부모 대시보드용: 루틴을 지정해 항목 승인 (activeRoutineId 없을 때 사용) */
+        /** 부모 대시보드용: 루틴을 지정해 항목 승인 후 완료 로그에 반영 (접속해도 유지) */
         parentApproveForRoutine: (routineId, itemId) => {
-          const { pendingConfirmItems } = get()
+          const pid = get().currentProfileId
+          if (pid) {
+            const by = { ...get().byProfile }
+            const current = by[pid] ?? defaultProfileData()
+            const pendingConfirms = (current.pendingConfirms ?? []).filter(
+              (p) => !(p.routineId === routineId && p.itemId === itemId)
+            )
+            by[pid] = { ...current, pendingConfirms }
+            set({ byProfile: by })
+          }
           get().completeItemForRoutine(routineId, itemId)
-          set({ pendingConfirmItems: pendingConfirmItems.filter((id) => id !== itemId) })
+          set((s) => ({ pendingConfirmItems: s.pendingConfirmItems.filter((id) => id !== itemId) }))
         },
 
         parentReject: (itemId) => {
+          const pid = get().currentProfileId
+          if (pid) {
+            const by = { ...get().byProfile }
+            const current = by[pid] ?? defaultProfileData()
+            const pendingConfirms = (current.pendingConfirms ?? []).filter((p) => p.itemId !== itemId)
+            by[pid] = { ...current, pendingConfirms }
+            set({ byProfile: by })
+          }
           set((s) => ({ pendingConfirmItems: s.pendingConfirmItems.filter((id) => id !== itemId) }))
+        },
+
+        /** 해당 자녀의 확인 대기 항목 ID 목록 (부모 대시보드에서 persist 데이터로 표시) */
+        getPendingConfirmItemsForProfile: (profileId) => {
+          const data = get().byProfile[profileId] ?? defaultProfileData()
+          return (data.pendingConfirms ?? []).map((p) => p.itemId)
         },
 
         resetSession: () => set({ activeRoutineId: null, sessionCompletedItems: [], pendingConfirmItems: [] }),
@@ -442,6 +551,7 @@ export const useKidRoutineStore = create<KidRoutineState>()(
           const legacy: ProfileRoutineData = {
             routines: raw.routines as RoutineTemplate[],
             logs: (raw.logs as RoutineLog[]) ?? [],
+            pendingConfirms: [],
             rewardPoints: (raw.rewardPoints as RewardPoints) ?? defaultRewardPoints,
             rewardShownDates: (raw.rewardShownDates as string[]) ?? [],
             wakeAlarmTime: (raw.wakeAlarmTime as string) ?? '07:00',
@@ -456,8 +566,13 @@ export const useKidRoutineStore = create<KidRoutineState>()(
             pendingConfirmItems: [],
           } as unknown as KidRoutineState
         }
+        const by = (raw.byProfile ?? {}) as Record<string, ProfileRoutineData>
+        for (const k of Object.keys(by)) {
+          if (by[k] && !Array.isArray(by[k].pendingConfirms)) (by[k] as ProfileRoutineData).pendingConfirms = []
+        }
         return {
           ...raw,
+          byProfile: by,
           activeRoutineId: null,
           sessionCompletedItems: [],
           pendingConfirmItems: [],
@@ -468,11 +583,25 @@ export const useKidRoutineStore = create<KidRoutineState>()(
   )
 )
 
+/** getServerSnapshot 무한루프 방지: 빈 배열은 항상 같은 참조 반환 */
+const EMPTY_ROUTINES: RoutineTemplate[] = []
+
+/** 확인 대기 항목 배열용 고정 참조 (셀렉터가 새 배열을 반환하지 않도록) */
+export const EMPTY_PENDING_ENTRIES: PendingConfirmEntry[] = []
+
 /** 현재 프로필의 routines (선택자) */
 export function selectRoutines(state: KidRoutineState): RoutineTemplate[] {
   const pid = state.currentProfileId
-  if (!pid || !state.byProfile[pid]) return []
+  if (!pid || !state.byProfile[pid]) return EMPTY_ROUTINES
   return state.byProfile[pid].routines
+}
+
+/** 지정한 프로필(자녀)의 루틴 목록 — 부모 대시보드에서 childId로 조회 시 사용 (다음 접속 시에도 persist된 데이터 그대로 반영) */
+export function selectRoutinesForProfile(profileId: string | null) {
+  return (state: KidRoutineState): RoutineTemplate[] => {
+    if (!profileId || !state.byProfile[profileId]) return EMPTY_ROUTINES
+    return state.byProfile[profileId].routines
+  }
 }
 
 export function selectRewardPoints(state: KidRoutineState): RewardPoints {

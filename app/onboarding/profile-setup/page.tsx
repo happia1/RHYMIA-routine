@@ -44,7 +44,7 @@ function ProfileSetupContent() {
   const resetOnboarding = useOnboardingStore((s) => s.reset)
   const role = (childRole ?? searchParams.get('role')) as ProfileRole
   const { addProfile, setActiveProfile } = useProfileStore()
-  const { applyTimerSettings, setCurrentProfileId } = useKidRoutineStore()
+  const { setCurrentProfileId, setWakeAlarmTime } = useKidRoutineStore()
 
   const isChild = role === 'child_preschool' || role === 'child_school'
   const isParent = role === 'mom' || role === 'dad'
@@ -59,23 +59,11 @@ function ProfileSetupContent() {
   const [selectedColor, setSelectedColor] = useState(AVATAR_COLORS[0])
   const [customPhotoBase64, setCustomPhotoBase64] = useState<string | null>(null)
   const [institutionType, setInstitutionType] = useState<'kindergarten' | 'daycare' | 'elementary' | null>(null)
+  const [wakeTime, setWakeTime] = useState('07:00')
   const [departureTime, setDepartureTime] = useState('')
   const [arrivalTime, setArrivalTime] = useState('')
   const [returnTime, setReturnTime] = useState('')
-  const [missionTimers, setMissionTimers] = useState<Record<string, number>>({
-    'km-2': 0, 'km-3': 0, 'km-4': 0, 'km-5': 0, 'km-6': 0,
-    'ke-3': 0, 'ke-4': 0,
-  })
-
-  const TIMER_MISSIONS = [
-    { id: 'km-2', label: '🫧 세수하기' },
-    { id: 'km-3', label: '🪥 양치하기' },
-    { id: 'km-4', label: '👗 옷 입기' },
-    { id: 'km-5', label: '🍳 아침 먹기' },
-    { id: 'km-6', label: '🎒 가방 챙기기' },
-    { id: 'ke-3', label: '🛁 목욕하기' },
-    { id: 'ke-4', label: '📖 책 읽기' },
-  ]
+  const [bedtime, setBedtime] = useState('21:00')
 
   const isValid = name.trim().length > 0
 
@@ -99,10 +87,11 @@ function ProfileSetupContent() {
       childSettings: isChild
         ? {
             institutionType,
+            wakeTime: wakeTime || null,
             departureTime: departureTime || null,
             arrivalTime: arrivalTime || null,
             returnTime: returnTime || null,
-            missionTimers,
+            bedtime: bedtime || null,
           }
         : undefined,
     })
@@ -110,7 +99,7 @@ function ProfileSetupContent() {
     setActiveProfile(newProfile.id)
     if (isChild) {
       setCurrentProfileId(newProfile.id)
-      applyTimerSettings(missionTimers)
+      setWakeAlarmTime(wakeTime || '07:00')
     }
     resetOnboarding()
 
@@ -227,11 +216,27 @@ function ProfileSetupContent() {
 
             <div className="mb-5">
               <label className="text-sm font-bold text-gray-500 mb-3 block">⏰ 시간 설정</label>
+              <p className="text-xs text-gray-400 mb-3">
+                아침 기상·등하원·저녁 취침 시간을 설정하면 홈과 루틴 화면에서 시간대별 상태를 알려드려요.
+              </p>
               <div className="flex flex-col gap-3">
+                <div className="bg-white border-2 border-gray-100 rounded-2xl px-4 py-3 flex items-center gap-3">
+                  <span className="text-xl">🌅</span>
+                  <div className="flex-1">
+                    <p className="text-xs text-gray-400 font-semibold">아침에 일어날 시간</p>
+                    <input
+                      type="time"
+                      value={wakeTime}
+                      onChange={(e) => setWakeTime(e.target.value)}
+                      className="text-xl font-black text-gray-700 focus:outline-none bg-transparent w-full"
+                    />
+                  </div>
+                </div>
+
                 <div className="bg-white border-2 border-gray-100 rounded-2xl px-4 py-3 flex items-center gap-3">
                   <span className="text-xl">🚪</span>
                   <div className="flex-1">
-                    <p className="text-xs text-gray-400 font-semibold">집 나서는 시간</p>
+                    <p className="text-xs text-gray-400 font-semibold">집 나서는 시간 (출발)</p>
                     <input
                       type="time"
                       value={departureTime}
@@ -239,13 +244,12 @@ function ProfileSetupContent() {
                       className="text-xl font-black text-gray-700 focus:outline-none bg-transparent w-full"
                     />
                   </div>
-                  <span className="text-xs text-gray-300">출발</span>
                 </div>
 
                 <div className="bg-white border-2 border-gray-100 rounded-2xl px-4 py-3 flex items-center gap-3">
                   <span className="text-xl">🏫</span>
                   <div className="flex-1">
-                    <p className="text-xs text-gray-400 font-semibold">등원 시간</p>
+                    <p className="text-xs text-gray-400 font-semibold">등원(등교) 시간</p>
                     <input
                       type="time"
                       value={arrivalTime}
@@ -253,13 +257,12 @@ function ProfileSetupContent() {
                       className="text-xl font-black text-gray-700 focus:outline-none bg-transparent w-full"
                     />
                   </div>
-                  <span className="text-xs text-gray-300">도착</span>
                 </div>
 
                 <div className="bg-white border-2 border-gray-100 rounded-2xl px-4 py-3 flex items-center gap-3">
                   <span className="text-xl">🏠</span>
                   <div className="flex-1">
-                    <p className="text-xs text-gray-400 font-semibold">하원 시간</p>
+                    <p className="text-xs text-gray-400 font-semibold">하원(하교) 시간</p>
                     <input
                       type="time"
                       value={returnTime}
@@ -267,58 +270,20 @@ function ProfileSetupContent() {
                       className="text-xl font-black text-gray-700 focus:outline-none bg-transparent w-full"
                     />
                   </div>
-                  <span className="text-xs text-gray-300">귀가</span>
                 </div>
-              </div>
-              <p className="text-xs text-gray-400 mt-2 ml-1">
-                루틴 화면에서 등원까지 남은 시간을 실시간으로 알려드려요 🚌
-              </p>
-            </div>
 
-            <div className="mb-5">
-              <label className="text-sm font-bold text-gray-500 mb-1 block">
-                ⏱ 미션 타이머 설정 <span className="text-gray-300 font-normal">(선택)</span>
-              </label>
-              <p className="text-xs text-gray-400 mb-3">
-                시간 제한이 필요한 미션만 설정해요. 0분 = 타이머 없음
-              </p>
-              <div className="flex flex-col gap-2">
-                {TIMER_MISSIONS.map(({ id, label }) => {
-                  const minutes = Math.floor((missionTimers[id] ?? 0) / 60)
-                  return (
-                    <div
-                      key={id}
-                      className="bg-white border-2 border-gray-100 rounded-2xl px-4 py-3 flex items-center gap-3"
-                    >
-                      <span className="text-sm font-bold text-gray-600 flex-1">{label}</span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setMissionTimers((prev) => ({
-                            ...prev,
-                            [id]: Math.max(0, (prev[id] ?? 0) - 60),
-                          }))}
-                          className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 font-black flex items-center justify-center text-lg"
-                        >
-                          −
-                        </button>
-                        <span className={`w-12 text-center font-black text-lg ${minutes > 0 ? 'text-[#FF8FAB]' : 'text-gray-300'}`}>
-                          {minutes > 0 ? `${minutes}분` : '−'}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setMissionTimers((prev) => ({
-                            ...prev,
-                            [id]: Math.min(1800, (prev[id] ?? 0) + 60),
-                          }))}
-                          className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 font-black flex items-center justify-center text-lg"
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })}
+                <div className="bg-white border-2 border-gray-100 rounded-2xl px-4 py-3 flex items-center gap-3">
+                  <span className="text-xl">😴</span>
+                  <div className="flex-1">
+                    <p className="text-xs text-gray-400 font-semibold">저녁에 잠자러 가는 시간</p>
+                    <input
+                      type="time"
+                      value={bedtime}
+                      onChange={(e) => setBedtime(e.target.value)}
+                      className="text-xl font-black text-gray-700 focus:outline-none bg-transparent w-full"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </motion.div>

@@ -44,3 +44,29 @@ export function isInWakeWindow(wakeTime: string): boolean {
   const hour = now.getHours()
   return hour >= wh - 1 && hour < 12
 }
+
+/** 아침 시간대: 05:00 ~ 11:59 → 아침 루틴 화면 자동 표시용 */
+const MORNING_START_HOUR = 5
+const MORNING_END_HOUR = 12
+
+/** 저녁 시간대: 17:00 ~ 20:59 → 저녁 루틴 화면 자동 표시용 */
+const EVENING_START_HOUR = 17
+const EVENING_END_HOUR = 21
+
+/**
+ * 현재가 아침 시간대인지 (자동으로 아침 루틴 화면을 보여줄 시간인지)
+ * 05:00 ~ 11:59 사이면 true
+ */
+export function isMorningTime(): boolean {
+  const hour = new Date().getHours()
+  return hour >= MORNING_START_HOUR && hour < MORNING_END_HOUR
+}
+
+/**
+ * 현재가 저녁 시간대인지 (자동으로 저녁 루틴 화면을 보여줄 시간인지)
+ * 17:00 ~ 20:59 사이면 true
+ */
+export function isEveningTime(): boolean {
+  const hour = new Date().getHours()
+  return hour >= EVENING_START_HOUR && hour < EVENING_END_HOUR
+}

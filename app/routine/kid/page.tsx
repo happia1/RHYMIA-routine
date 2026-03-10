@@ -7,14 +7,19 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Settings } from 'lucide-react'
 import { useKidRoutineStore, selectRoutines, selectWakeAlarmTime, selectAlarmEnabled, selectLastAlarmDismissedDate } from '@/lib/stores/kidRoutineStore'
 import { useProfileStore } from '@/lib/stores/profileStore'
+import { useMilestoneStore } from '@/lib/stores/milestoneStore'
+import type { Milestone } from '@/lib/stores/milestoneStore'
 import { getTodayRoutines } from '@/lib/utils/defaultRoutines'
-import { isNightTime, isWakeTimeNow } from '@/lib/utils/sleepSchedule'
+
+/** getSnapshot 무한루프 방지: 빈 마일스톤 배열은 항상 같은 참조 반환 */
+const EMPTY_MILESTONES: Milestone[] = []
+import { isNightTime, isWakeTimeNow, isMorningTime, isEveningTime } from '@/lib/utils/sleepSchedule'
 import { SleepingView } from '@/components/kid/SleepingView'
 import { WakeAlarmOverlay } from '@/components/kid/WakeAlarmOverlay'
 import { DepartureBanner } from '@/components/kid/DepartureBanner'
@@ -29,15 +34,23 @@ const ROUTINE_TYPE_META = {
 
 export default function KidRoutineMainPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const activeProfile = useProfileStore((s) => s.getActiveProfile())
   const setCurrentProfileId = useKidRoutineStore((s) => s.setCurrentProfileId)
   const routines = useKidRoutineStore(selectRoutines)
   const initRoutines = useKidRoutineStore((s) => s.initRoutines)
+  const hasShownReward = useKidRoutineStore((s) => s.hasShownReward)
   const getCompletionRate = useKidRoutineStore((s) => s.getCompletionRate)
   const wakeAlarmTime = useKidRoutineStore(selectWakeAlarmTime)
   const alarmEnabled = useKidRoutineStore(selectAlarmEnabled)
   const lastAlarmDismissedDate = useKidRoutineStore(selectLastAlarmDismissedDate)
   const dismissAlarm = useKidRoutineStore((s) => s.dismissAlarm)
+  // 마일스톤 블록: 현재 자녀 프로필 기준 달성 현황 (루틴 페이지에서 바로 마일스톤 진입 가능). 셀렉터는 안정 참조만 반환해 무한루프 방지
+  const profileId = activeProfile?.id ?? null
+  const milestones = useMilestoneStore((s) =>
+    profileId ? (s.byProfile[profileId] ?? EMPTY_MILESTONES) : EMPTY_MILESTONES
+  )
+  const achievedCount = milestones.filter((m) => m.isAchieved).length
 
   // 현재 선택된 프로필 기준으로 루틴 데이터 사용 (프로필 전환 시 반영)
   useEffect(() => {
@@ -71,6 +84,46 @@ export default function KidRoutineMainPage() {
 
   // 오늘 요일에 맞는 루틴만 (예: 평일=아침·저녁, 주말=주말 루틴)
   const todayRoutines = getTodayRoutines(routines)
+
+  // 아침/저녁 시간대에는 해당 루틴 실행 화면으로 자동 이동. 아침 보상 이미 봤으면 저녁 루틴으로 (무한루프 방지)
+  // 단, "목록 보기"로 돌아온 경우(?list=1)에는 자동 이동하지 않고 목록을 보여줌
+  const forceShowList = searchParams.get('list') === '1'
+  const morningRoutine = todayRoutines.find((r) => r.type === 'morning')
+  const eveningRoutine = todayRoutines.find((r) => r.type === 'evening')
+  let autoRedirectTarget: string | null = null
+  if (!forceShowList) {
+    if (isEveningTime() && eveningRoutine) {
+      autoRedirectTarget = eveningRoutine.id
+    } else if (isMorningTime() && morningRoutine) {
+      if (hasShownReward(morningRoutine.id) && eveningRoutine) {
+        autoRedirectTarget = eveningRoutine.id
+      } else {
+        autoRedirectTarget = morningRoutine.id
+      }
+    }
+  }
+  const shouldAutoShowMorning = autoRedirectTarget === morningRoutine?.id
+  const shouldAutoShowEvening = autoRedirectTarget === eveningRoutine?.id
+
+  useEffect(() => {
+    if (autoRedirectTarget) {
+      router.replace(`/routine/kid/${autoRedirectTarget}`)
+    }
+  }, [autoRedirectTarget, router])
+
+  // 자동으로 루틴 화면으로 넘어가는 중일 때는 목록 대신 잠깐 로딩 표시 (목록이 깜빡 보이지 않도록)
+  if (autoRedirectTarget) {
+    return (
+      <div className="min-h-screen bg-[#FFF9F0] flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-5xl mb-3 animate-pulse">
+            {shouldAutoShowMorning ? '🌅' : '🌙'}
+          </div>
+          <p className="text-gray-500 font-medium">루틴 불러오는 중...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-[#FFF9F0] px-5 py-8 pb-24">
@@ -107,7 +160,7 @@ export default function KidRoutineMainPage() {
       {/* 등원까지 남은 시간 카운트다운 (자녀 프로필 + 출발 시간 설정 시에만 표시) */}
       <DepartureBanner />
 
-      {/* 칭찬 스티커 · 우리 친구 바로가기 */}
+      {/* 칭찬 스티커 · 나의 펫 · 마일스톤 바로가기 (마일스톤은 루틴 페이지에서 바로 진입) */}
       <div className="flex gap-3 mb-6">
         <motion.button
           whileTap={{ scale: 0.97 }}
@@ -123,12 +176,22 @@ export default function KidRoutineMainPage() {
           className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-white border-2 border-[#A8E6CF] shadow-sm"
         >
           <span className="text-2xl">🐾</span>
-          <span className="text-sm font-black text-gray-700">우리 친구</span>
+          <span className="text-sm font-black text-gray-700">나의 펫</span>
+        </motion.button>
+        <motion.button
+          whileTap={{ scale: 0.97 }}
+          onClick={() => router.push('/routine/kid/milestone')}
+          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-white border-2 border-[#FF8FAB] shadow-sm"
+        >
+          <span className="text-2xl">🏆</span>
+          <span className="text-sm font-black text-gray-700">
+            마일스톤{milestones.length > 0 ? ` ${achievedCount}/${milestones.length}` : ''}
+          </span>
         </motion.button>
       </div>
 
-      {/* 루틴 카드 목록 (아침/저녁/주말 등) */}
-      <div className="flex flex-col gap-4">
+      {/* 루틴 카드 목록: 1:1 비율 — 왼쪽 해/달 이미지, 오른쪽 루틴명·항목 수·완료율 */}
+      <div className="grid grid-cols-2 gap-3">
         {todayRoutines.map((routine, idx) => {
           const meta = ROUTINE_TYPE_META[routine.type] ?? ROUTINE_TYPE_META.special
           const rate = getCompletionRate(routine.id)
@@ -143,32 +206,40 @@ export default function KidRoutineMainPage() {
               whileTap={{ scale: 0.97 }}
               onClick={() => router.push(`/routine/kid/${routine.id}`)}
               className={`
-                relative w-full rounded-3xl p-6 text-left overflow-hidden
+                relative w-full rounded-2xl overflow-hidden text-left
                 bg-gradient-to-br ${meta.color}
-                shadow-lg
+                shadow-lg min-h-[140px] flex flex-row
               `}
             >
-              <div className="flex items-center gap-4">
-                <span className="text-5xl">{meta.emoji}</span>
-                <div className="flex-1">
-                  <p className="text-xl font-black text-white">{routine.title}</p>
-                  <p className="text-white/80 text-sm mt-0.5">
-                    {routine.items.length}개 항목
-                  </p>
-                </div>
-                {isDone && <span className="text-3xl">✅</span>}
+              {/* 왼쪽 50%: 해(아침) / 달(저녁) 등 루틴 타입 아이콘 */}
+              <div className="w-1/2 flex-shrink-0 flex items-center justify-center bg-white/20 min-h-[140px]">
+                <span
+                  className="text-5xl sm:text-6xl drop-shadow-md"
+                  aria-hidden
+                >
+                  {meta.emoji}
+                </span>
               </div>
 
-              {/* 진행률 바 (오늘 이 루틴 몇 % 완료했는지) */}
-              <div className="mt-4 h-2 bg-white/30 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-white rounded-full transition-all duration-500"
-                  style={{ width: `${rate * 100}%` }}
-                />
+              {/* 오른쪽 50%: 루틴명, 항목 수, 완료율 */}
+              <div className="w-1/2 flex-shrink-0 flex flex-col justify-center p-3 min-w-0">
+                <p className="text-sm font-black text-white leading-tight truncate">
+                  {routine.title}
+                </p>
+                <p className="text-white/90 text-xs mt-0.5">
+                  {routine.items.length}개 항목
+                </p>
+                <div className="mt-2 h-1.5 bg-white/30 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-white rounded-full transition-all duration-500"
+                    style={{ width: `${rate * 100}%` }}
+                  />
+                </div>
+                <p className="text-white font-bold text-xs mt-1">
+                  {Math.round(rate * 100)}% 완료
+                  {isDone && <span className="ml-1">✅</span>}
+                </p>
               </div>
-              <p className="text-white/70 text-xs mt-1 text-right">
-                {Math.round(rate * 100)}% 완료
-              </p>
             </motion.button>
           )
         })}

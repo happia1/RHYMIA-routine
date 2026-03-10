@@ -23,7 +23,9 @@ export const ROUTINE_IMAGES: Record<string, string> = {
   'outdoor-play':'/routine-icons/outdoor-play.png',   // 야외 놀이
   'listen-music':'/routine-icons/listen-music.png',   // 음악 듣기
   'apple':       '/routine-icons/apple.png',          // 간식
-  'greet':       '/routine-icons/greet.png',          // 인사하기 (안녕히 다녀오겠습니다)
+  'greet':       '/routine-icons/greet.png',          // 인사하기 (다녀오겠습니다)
+  'bus':         '/routine-icons/bus.png',            // 버스타러가기 (이미지 추가 예정)
+  'gargle':      '/routine-icons/gargle.png',         // 가글하기 (이미지 추가 예정)
 }
 
 /** 미션 라벨 → imageKey 매핑 (저장된 데이터 보정 시, id가 아닌 라벨로 올바른 이미지 매칭) */
@@ -32,16 +34,20 @@ export const LABEL_TO_IMAGE_KEY: Record<string, string> = {
   '세수하기': 'wash-face',
   '양치하기': 'brush-teeth',
   '옷 입기': 'get-dressed',
+  '옷 갈아입기': 'get-dressed',
   '아침 먹기': 'breakfast',
   '가방 챙기기': 'unpack-bag',
   '인사하기': 'greet',
   '손 씻기': 'wash-hand',
   '가방 정리': 'tidy-up',
+  '정리 정돈 하기': 'tidy-up',
   '목욕하기': 'bath-time',
   '책 읽기': 'read-book',
   '잠자러 가기': 'bedtime',
   '이불 개기': 'make-bed',
   '점심 먹기': 'meal-time',
+  '밥 먹기': 'meal-time',
+  '저녁 먹기': 'meal-time',
   '브런치': 'brunch',
   '숙제하기': 'homework',
   '놀이 시간': 'play-time',
@@ -50,6 +56,9 @@ export const LABEL_TO_IMAGE_KEY: Record<string, string> = {
   '학교 가기': 'school',
   '등원하기': 'go-to-school',
   '간식 먹기': 'apple',
+  '버스타러가기': 'bus',
+  '인사하기(다녀오겠습니다)': 'greet',
+  '가글하기': 'gargle',
 }
 
 const makeItem = (
@@ -80,7 +89,7 @@ const makeItem = (
 }
 
 // ── 아침 루틴 ──
-// 일어나기 → 세수/양치 → 옷입기 → 아침먹기 → 가방챙기기 → 인사하기
+// 일어나기 → 세수/양치 → 옷입기 → 아침먹기 → 가방챙기기 (인사하기는 제거, 필요 시 루틴 수정에서 추가)
 export const DEFAULT_KID_MORNING: RoutineTemplate = {
   id: 'default-kid-morning',
   mode: 'kid',
@@ -96,7 +105,6 @@ export const DEFAULT_KID_MORNING: RoutineTemplate = {
     makeItem('km-4', 'get-dressed', '👗', '옷 입기',     4),
     makeItem('km-5', 'breakfast',   '🍳', '아침 먹기',   5),
     makeItem('km-6', 'unpack-bag',  '🎒', '가방 챙기기', 6),
-    makeItem('km-7', 'greet',       '🤗', '인사하기',    7, 0, '안녕히 다녀오겠습니다!'),
   ],
 }
 
@@ -112,7 +120,7 @@ export const DEFAULT_KID_EVENING: RoutineTemplate = {
   schedule: { days: [1, 2, 3, 4, 5, 6, 0], time: '19:00' },
   items: [
     makeItem('ke-1', 'wash-hand',  '🧴', '손 씻기',     1),
-    makeItem('ke-2', 'tidy-up',    '📦', '가방 정리',   2),
+    makeItem('ke-2', 'tidy-up',    '📦', '정리 정돈 하기', 2),
     makeItem('ke-3', 'bath-time',  '🛁', '목욕하기',    3),
     makeItem('ke-4', 'read-book',  '📖', '책 읽기',     4),
     makeItem('ke-5', 'bedtime',    '😴', '잠자러 가기', 5),  // 수면모드 트리거
@@ -162,10 +170,10 @@ export const ALL_DEFAULT_SCHOOL_KID_ROUTINES = [
   DEFAULT_SCHOOL_KID_EVENING,
 ]
 
-// ── 추가 아이템 풀 (루틴 커스터마이징 시 선택 가능) ──
+// ── 추가 아이템 풀 (루틴 수정 화면에서 추가 가능한 항목들) ──
 export const EXTRA_ROUTINE_ITEMS = [
   makeItem('ex-1',  'make-bed',    '🛏️', '이불 개기',     0),
-  makeItem('ex-2',  'meal-time',   '🍽️', '점심 먹기',     0),
+  makeItem('ex-2',  'meal-time',   '🍽️', '밥 먹기',       0),
   makeItem('ex-3',  'brunch',      '🥞',  '브런치',        0),
   makeItem('ex-4',  'homework',    '✏️',  '숙제하기',      0),
   makeItem('ex-5',  'play-time',   '🎮',  '놀이 시간',     0),
@@ -174,6 +182,12 @@ export const EXTRA_ROUTINE_ITEMS = [
   makeItem('ex-8',  'school',      '🏫',  '학교 가기',     0),
   makeItem('ex-9',  'go-to-school','🚌',  '등원하기',      0),
   makeItem('ex-10', 'apple',       '🍎',  '간식 먹기',     0),
+  makeItem('ex-11', 'bus',         '🚌',  '버스타러가기',  0),
+  makeItem('ex-12', 'greet',       '🤗',  '인사하기(다녀오겠습니다)', 0, 0, '안녕히 다녀오겠습니다!'),
+  makeItem('ex-13', 'gargle',      '💧',  '가글하기',      0),
+  makeItem('ex-14', 'tidy-up',     '📦',  '정리 정돈 하기', 0),
+  makeItem('ex-15', 'brush-teeth', '🪥',  '양치하기',      0),
+  makeItem('ex-16', 'get-dressed', '👗',  '옷 갈아입기',   0),
 ]
 
 export const ALL_DEFAULT_KID_ROUTINES = [DEFAULT_KID_MORNING, DEFAULT_KID_EVENING]

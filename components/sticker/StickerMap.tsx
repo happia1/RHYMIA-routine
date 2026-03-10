@@ -10,14 +10,15 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { MAP_TILES } from '@/types/sticker'
 import { useStickerStore } from '@/lib/stores/stickerStore'
 
-export function StickerMap() {
-  const {
-    currentMapPosition,
-    placed,
-    inbox,
-    placeSticker,
-    achievedCheckpoints,
-  } = useStickerStore()
+/** profileId: 현재 자녀(프로필) ID — 프로필별로 스티커·지도가 분리됨 */
+interface StickerMapProps {
+  profileId: string
+}
+
+export function StickerMap({ profileId }: StickerMapProps) {
+  const getStateForProfile = useStickerStore((s) => s.getStateForProfile)
+  const placeSticker = useStickerStore((s) => s.placeSticker)
+  const { currentMapPosition, placed, inbox } = getStateForProfile(profileId)
   const [showStickerBox, setShowStickerBox] = useState(false)
   const [checkpointCelebration, setCheckpointCelebration] = useState<
     number | null
@@ -31,7 +32,7 @@ export function StickerMap() {
   }
 
   const handlePlaceSticker = (stickerId: string) => {
-    placeSticker(stickerId)
+    placeSticker(profileId, stickerId)
     setShowStickerBox(false)
     const newPos = currentMapPosition + 1
     if ([5, 10, 15, 19].includes(newPos)) {
@@ -132,13 +133,14 @@ export function StickerMap() {
         })}
       </div>
 
+      {/* 스티커 붙이기 팝업: pb-24로 하단 내비게이션 바 위에 올려서 스티커가 잘리지 않게 표시 */}
       <AnimatePresence>
         {showStickerBox && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-30 flex items-end"
+            className="fixed inset-0 z-30 flex items-end pb-24"
             onClick={() => setShowStickerBox(false)}
           >
             <motion.div

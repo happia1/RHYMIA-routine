@@ -51,6 +51,8 @@ export interface RoutineItem {
   isCompleted?: boolean
   /** 항목 분류 (필터·통계용, 없으면 기본 'other') */
   category?: RoutineItemCategory
+  /** true면 자녀 루틴 실행 화면에 표시하지 않음 (편집에서 숨김 처리) */
+  hidden?: boolean
 }
 
 /** 루틴 템플릿 (아침 루틴, 저녁 루틴 등 전체 묶음) */

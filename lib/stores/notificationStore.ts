@@ -17,6 +17,8 @@ export interface Notification {
   isRead: boolean
   type: NotificationType
   childProfileId?: string
+  /** 마일스톤 확인 알림일 때: 부모가 "확인" 시 달성 처리 + 펫 먹이 지급에 사용 */
+  milestoneId?: string
 }
 
 interface NotificationState {
@@ -28,33 +30,16 @@ interface NotificationState {
   markRead: (id: string) => void
   deleteNotification: (id: string) => void
   markAllRead: () => void
+  /** 전체 알림 삭제 — '알림 모두 확인' 버튼으로 목록을 비울 때 사용 */
+  clearAllNotifications: () => void
 }
 
+/** 알림 초기값: 임시 데이터 없이 빈 배열. 실제 알림은 자녀가 루틴 완료 시 추가됨 */
 export const useNotificationStore = create<NotificationState>()(
   persist(
     (set, get) => ({
-      notifications: [
-        {
-          id: '1',
-          fromName: '아린',
-          fromEmoji: '🧒',
-          content: '양치하기 완료했어요! 확인해주세요 🦷',
-          timestamp: new Date(Date.now() - 300000).toISOString(),
-          isRead: false,
-          type: 'child_mission',
-          childProfileId: 'child-1',
-        },
-        {
-          id: '2',
-          fromName: 'RHYMIA',
-          fromEmoji: '🤖',
-          content: '아린이 오늘 아침 루틴 3/6 완료했어요!',
-          timestamp: new Date(Date.now() - 3600000).toISOString(),
-          isRead: false,
-          type: 'system',
-        },
-      ],
-      unreadCount: 2,
+      notifications: [],
+      unreadCount: 0,
 
       addNotification: (data) =>
         set((s) => ({
@@ -95,7 +80,21 @@ export const useNotificationStore = create<NotificationState>()(
           notifications: s.notifications.map((n) => ({ ...n, isRead: true })),
           unreadCount: 0,
         })),
+
+      /** 전체 알림을 목록에서 제거 (알림 모두 확인 시 화면에서 사라지게) */
+      clearAllNotifications: () =>
+        set({ notifications: [], unreadCount: 0 }),
     }),
-    { name: 'rhymia-notifications' }
+    {
+      name: 'rhymia-notifications',
+      version: 1,
+      migrate: (persisted: unknown) => {
+        const raw = persisted as { notifications?: Notification[]; unreadCount?: number } | undefined
+        const prev = Array.isArray(raw?.notifications) ? raw.notifications : []
+        const list = prev.filter((n) => n.id !== '1' && n.id !== '2')
+        const unread = list.filter((n) => !n.isRead).length
+        return { notifications: list, unreadCount: raw?.unreadCount ?? unread }
+      },
+    }
   )
 )

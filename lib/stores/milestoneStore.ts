@@ -6,6 +6,9 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { useNotificationStore } from '@/lib/stores/notificationStore'
+import { useProfileStore } from '@/lib/stores/profileStore'
+import { usePetStore } from '@/lib/stores/petStore'
 
 export interface Milestone {
   id: string
@@ -242,8 +245,16 @@ interface MilestoneState {
   milestones: Milestone[]
   /** 자녀(프로필)별 마일스톤 목록 — 부모가 풀에서 추가한 것 + 커스텀 */
   byProfile: Record<string, Milestone[]>
+  /** 자녀가 "달성했어요" 요청한 마일스톤 ID 목록 (프로필별). 부모가 알림에서 확인하면 달성 처리 + 펫 먹이 +1 */
+  pendingMilestoneIds: Record<string, string[]>
 
   getMilestones: (profileId: string | null) => Milestone[]
+  /** 해당 프로필의 확인 대기 마일스톤 ID 목록 (자녀 화면에서 "확인 중" 표시용) */
+  getPendingMilestoneIds: (profileId: string | null) => string[]
+  /** 자녀가 마일스톤 카드를 눌렀을 때: 확인 대기 추가 + 부모 알림 발송 */
+  requestMilestoneConfirm: (profileId: string, milestoneId: string) => void
+  /** 부모가 알림에서 확인 시: 달성 처리 + 해당 자녀 펫 먹이 +1 */
+  parentApproveMilestone: (profileId: string, milestoneId: string) => void
   initializeMilestones: (profileId: string | null, targetAge: 'preschool' | 'school') => void
   /** 풀에서 마일스톤 하나를 이 자녀 목록에 추가 (이미 있으면 무시) */
   addMilestoneFromPool: (profileId: string, template: MilestoneTemplate) => void
@@ -273,6 +284,7 @@ export const useMilestoneStore = create<MilestoneState>()(
     (set, get) => ({
       milestones: [],
       byProfile: {},
+      pendingMilestoneIds: {},
 
       getMilestones: (profileId) => {
         if (profileId !== null && profileId !== undefined) {
@@ -280,6 +292,47 @@ export const useMilestoneStore = create<MilestoneState>()(
           return list ?? []
         }
         return get().milestones
+      },
+
+      getPendingMilestoneIds: (profileId) => {
+        if (!profileId) return []
+        return get().pendingMilestoneIds[profileId] ?? []
+      },
+
+      requestMilestoneConfirm: (profileId, milestoneId) => {
+        const pending = get().pendingMilestoneIds[profileId] ?? []
+        if (pending.includes(milestoneId)) return
+        const list = get().byProfile[profileId] ?? []
+        const ms = list.find((m) => m.id === milestoneId)
+        if (!ms || ms.isAchieved) return
+        set((s) => ({
+          pendingMilestoneIds: {
+            ...s.pendingMilestoneIds,
+            [profileId]: [...(s.pendingMilestoneIds[profileId] ?? []), milestoneId],
+          },
+        }))
+        const profile = useProfileStore.getState().getProfile(profileId)
+        const childName = profile?.name ?? '우리 아이'
+        const childEmoji = profile?.avatarEmoji ?? '🧒'
+        useNotificationStore.getState().addNotification({
+          fromName: childName,
+          fromEmoji: childEmoji,
+          content: `"${ms.title}" 달성했어요! 확인해주세요`,
+          type: 'child_mission',
+          childProfileId: profileId,
+          milestoneId,
+        })
+      },
+
+      parentApproveMilestone: (profileId, milestoneId) => {
+        get().achieveMilestone(profileId, milestoneId)
+        usePetStore.getState().addFood(profileId, 1)
+        set((s) => ({
+          pendingMilestoneIds: {
+            ...s.pendingMilestoneIds,
+            [profileId]: (s.pendingMilestoneIds[profileId] ?? []).filter((id) => id !== milestoneId),
+          },
+        }))
       },
 
       initializeMilestones: (profileId, targetAge) => {
@@ -392,6 +445,17 @@ export const useMilestoneStore = create<MilestoneState>()(
         }))
       },
     }),
-    { name: 'rhymia-milestones' }
+    {
+      name: 'rhymia-milestones',
+      version: 2,
+      migrate: (persisted: unknown) => {
+        const raw = persisted as { byProfile?: Record<string, Milestone[]>; milestones?: Milestone[]; pendingMilestoneIds?: Record<string, string[]> } | undefined
+        return {
+          milestones: raw?.milestones ?? [],
+          byProfile: raw?.byProfile ?? {},
+          pendingMilestoneIds: raw?.pendingMilestoneIds ?? {},
+        }
+      },
+    }
   )
 )

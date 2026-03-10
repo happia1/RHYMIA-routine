@@ -12,7 +12,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Volume2, VolumeX } from 'lucide-react'
-import { useKidRoutineStore, selectRewardPoints } from '@/lib/stores/kidRoutineStore'
+import { useKidRoutineStore, selectRewardPoints, selectRoutines } from '@/lib/stores/kidRoutineStore'
 import { useProfileStore } from '@/lib/stores/profileStore'
 import { RoutineItem } from '@/types/routine'
 import { useTTS } from '@/lib/hooks/useTTS'
@@ -23,7 +23,18 @@ import { RoutineItemIcon } from '@/components/kid/RoutineItemIcon'
 import { RewardScreen } from '@/components/kid/RewardScreen'
 import { GoodNightScreen } from '@/components/kid/GoodNightScreen'
 import { SleepModeScreen } from '@/components/kid/SleepModeScreen'
-import { ROUTINE_IMAGES, LABEL_TO_IMAGE_KEY } from '@/lib/utils/defaultRoutines'
+import { ROUTINE_IMAGES, LABEL_TO_IMAGE_KEY, getTodayRoutines } from '@/lib/utils/defaultRoutines'
+
+/** 인사하기 카드는 화면에 숨김 처리 (데이터는 유지, 표시·진행률에서만 제외) */
+function isGreetingItem(item: RoutineItem): boolean {
+  const label = item.label?.trim() ?? ''
+  return label === '인사하기' || label === '인사하기(다녀오겠습니다)'
+}
+
+/** 편집에서 숨김 처리한 항목 또는 인사하기 → 자녀 루틴 화면에 표시하지 않음 */
+function isHiddenFromRoutine(item: RoutineItem): boolean {
+  return item.hidden === true || isGreetingItem(item)
+}
 
 // 미션 카드 상태: idle=미완료, pending=부모 확인 대기(흐릿), approved=승인완료(사라짐)
 type ItemState = 'idle' | 'pending' | 'approved'
@@ -37,7 +48,10 @@ interface MissionCardProps {
   onTimeUp: (itemId: string) => void
 }
 
-/** 미션 카드 한 장: idle(탭 가능 + 타이머) / pending(흐릿 + 확인 중) / approved(exit 시 사라짐) */
+/**
+ * 미션 카드 한 장: 세로형 레이아웃(이미지 위 · 텍스트 아래), 이미지 크게 표시
+ * idle=탭 가능+타이머 / pending=흐릿+확인 중 / approved=exit 시 사라짐
+ */
 function MissionCard({ item, state, isActive, onTap, onTimerStart, onTimeUp }: MissionCardProps) {
   return (
     <AnimatePresence mode="wait">
@@ -61,40 +75,47 @@ function MissionCard({ item, state, isActive, onTap, onTimerStart, onTimeUp }: M
           whileTap={state === 'idle' ? { scale: 0.95 } : {}}
           onClick={() => state === 'idle' && onTap(item)}
           className={`
-            relative flex items-center gap-4 p-5 rounded-3xl
+            relative flex flex-col rounded-3xl overflow-hidden
+            w-full max-w-[180px] mx-auto
             ${state === 'idle'
               ? 'bg-white shadow-lg shadow-pink-100 border-2 border-pink-50 cursor-pointer'
               : 'bg-gray-100 border-2 border-gray-200 cursor-not-allowed'
             }
           `}
         >
-          <div className="w-16 h-16 rounded-2xl bg-[#FFF9F0] flex-shrink-0 flex items-center justify-center overflow-hidden">
-            <RoutineItemIcon item={item} className="w-16 h-16" imageClassName="w-12 h-12 object-contain" />
+          {/* 이미지 영역: 기존(48px) 대비 약 3배(144px) 크기로 표시, 위쪽에 배치 */}
+          <div className="w-full h-[150px] rounded-t-2xl bg-[#FFF9F0] flex items-center justify-center overflow-hidden flex-shrink-0">
+            <RoutineItemIcon
+              item={item}
+              className="w-[140px] h-[140px] flex-shrink-0"
+              imageClassName="w-full h-full object-contain"
+            />
           </div>
 
-          <div className="flex-1 min-w-0">
-            <p className={`text-xl font-black ${state === 'pending' ? 'text-gray-400' : 'text-gray-700'}`}>
+          {/* 텍스트 영역: 이미지 아래 줄바꿈 배치 */}
+          <div className="flex flex-col flex-1 p-3 min-w-0">
+            <p className={`text-base font-black text-center leading-tight ${state === 'pending' ? 'text-gray-400' : 'text-gray-700'}`}>
               {item.label}
             </p>
             {state === 'pending' && (
               <motion.p
-                className="text-xs text-amber-500 font-semibold mt-0.5 flex items-center gap-1"
+                className="text-xs text-amber-500 font-semibold mt-1 flex items-center justify-center gap-1"
                 animate={{ opacity: [1, 0.5, 1] }}
                 transition={{ repeat: Infinity, duration: 1.2 }}
               >
-                ⏳ 엄마/아빠 확인 중...
+                ⏳ 확인 중...
               </motion.p>
             )}
-            {state === 'idle' && (
-              <p className="text-sm text-gray-400 mt-0.5">{item.ttsText}</p>
+            {state === 'idle' && item.ttsText && (
+              <p className="text-xs text-gray-400 mt-0.5 text-center line-clamp-2">{item.ttsText}</p>
             )}
           </div>
 
-          {/* 타이머 (idle이고, 타이머가 설정된 미션만 표시) */}
+          {/* 타이머: idle이고 타이머 설정된 미션만, 카드 하단 중앙 */}
           {state === 'idle' && (item.timerEnabled ?? (item.timerSeconds ?? 0) > 0) && (
             <div
               onClick={(e) => { e.stopPropagation(); onTimerStart(item.id) }}
-              className="flex-shrink-0"
+              className="flex-shrink-0 flex justify-center pb-2"
             >
               <MissionTimer
                 totalSeconds={item.timerSeconds || 0}
@@ -102,12 +123,6 @@ function MissionCard({ item, state, isActive, onTap, onTimerStart, onTimeUp }: M
                 onTimeUp={() => onTimeUp(item.id)}
                 label={item.label}
               />
-            </div>
-          )}
-
-          {state === 'pending' && (
-            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
-              <span className="text-xl">⏳</span>
             </div>
           )}
         </motion.div>
@@ -134,6 +149,7 @@ export default function KidRoutineExecutePage() {
   const resetSession = useKidRoutineStore((s) => s.resetSession)
   const markRewardShown = useKidRoutineStore((s) => s.markRewardShown)
   const hasShownReward = useKidRoutineStore((s) => s.hasShownReward)
+  const routines = useKidRoutineStore(selectRoutines)
 
   const [ttsEnabled, setTtsEnabled] = useState(false)
   const { speak, cancel } = useTTS({ enabled: ttsEnabled, preset: 'kid' })
@@ -144,11 +160,15 @@ export default function KidRoutineExecutePage() {
   })
   const [activeTimerItemId, setActiveTimerItemId] = useState<string | null>(null)
   const [timedOutItems, setTimedOutItems] = useState<string[]>([])
+  const [mounted, setMounted] = useState(false)
 
-  const routine = getActiveRoutine()
   const todayLog = getTodayLog(routineId)
+  // URL의 routineId로 루틴 조회 (아침→저녁 전환 직후에도 바로 표시되도록). 없으면 활성 루틴 사용
+  const routine = routines.find((r) => r.id === routineId) ?? getActiveRoutine()
 
-  // 진입 시 현재 프로필 기준 루틴 사용 + 초기화 후 활성 루틴 설정
+  useEffect(() => setMounted(true), [])
+
+  // 진입 시 현재 프로필 기준 루틴 사용 + 초기화 후 활성 루틴 설정 (routines 의존 제거 → initRoutines 무한 루프 방지)
   useEffect(() => {
     setCurrentProfileId(activeProfile?.id ?? null)
   }, [activeProfile?.id, setCurrentProfileId])
@@ -157,6 +177,18 @@ export default function KidRoutineExecutePage() {
     if (!activeProfile?.id) return
     initRoutines(activeProfile.role)
     if (hasShownReward(routineId)) {
+      const state = useKidRoutineStore.getState()
+      const pid = state.currentProfileId
+      const rs = pid && state.byProfile[pid] ? state.byProfile[pid].routines : []
+      const r = rs.find((rr: { id: string }) => rr.id === routineId)
+      if (r?.type === 'morning') {
+        const todayRoutines = getTodayRoutines(rs)
+        const eveningRoutine = todayRoutines.find((rr: { type: string }) => rr.type === 'evening')
+        if (eveningRoutine) {
+          router.replace(`/routine/kid/${eveningRoutine.id}`)
+          return
+        }
+      }
       router.replace('/routine/kid')
       return
     }
@@ -164,15 +196,20 @@ export default function KidRoutineExecutePage() {
     speak(TTS_SCRIPTS.welcome)
   }, [routineId, activeProfile?.id, activeProfile?.role, initRoutines, setActiveRoutine, speak, hasShownReward, router])
 
-  // 전체 완료 감지 (pending 제외). 이미 오늘 보상 화면 봤으면 절대 다시 띄우지 않음.
+  // 전체 완료 감지 (인사하기는 숨김이라 제외, pending 제외). 이미 오늘 보상 봤으면 다시 띄우지 않음.
+  const visibleRoutineItems = routine?.items.filter((item) => !isHiddenFromRoutine(item)) ?? []
   useEffect(() => {
     if (!routine) return
     if (hasShownReward(routineId)) return
-    const totalItems = routine.items.length
-    if (sessionCompletedItems.length >= totalItems && totalItems > 0) {
+    const totalVisible = visibleRoutineItems.length
+    const completedVisible = sessionCompletedItems.filter((id) => {
+      const item = routine.items.find((i) => i.id === id)
+      return item && !isGreetingItem(item)
+    }).length
+    if (totalVisible > 0 && completedVisible >= totalVisible) {
       setTimeout(() => setShowReward(true), 600)
     }
-  }, [sessionCompletedItems, routine, routineId, hasShownReward])
+  }, [sessionCompletedItems, routine, routineId, hasShownReward, visibleRoutineItems.length])
 
   const handleTap = useCallback((item: RoutineItem) => {
     // TTS는 MissionCompletePopup에서 missionTap(itemLabel)으로 재생
@@ -200,17 +237,37 @@ export default function KidRoutineExecutePage() {
   }
 
   const visibleItems = routine?.items.filter(
-    (item) => !sessionCompletedItems.includes(item.id)
+    (item) => !isHiddenFromRoutine(item) && !sessionCompletedItems.includes(item.id)
   ) ?? []
 
-  const progressRate = routine
-    ? sessionCompletedItems.length / routine.items.length
+  const completedVisibleCount = routine
+    ? sessionCompletedItems.filter((id) => {
+        const item = routine.items.find((i) => i.id === id)
+        return item && !isHiddenFromRoutine(item)
+      }).length
     : 0
+  const totalVisibleCount = visibleRoutineItems.length
+  const progressRate = totalVisibleCount > 0 ? completedVisibleCount / totalVisibleCount : 0
 
   if (!routine) {
+    if (!mounted) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-[#FFF9F0]">
+          <p className="text-gray-500 font-medium">루틴 불러오는 중...</p>
+        </div>
+      )
+    }
+    const isLoading = activeProfile?.id && routines.length === 0
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#FFF9F0]">
-        <p className="text-gray-400">루틴을 찾을 수 없어요 😅</p>
+        {isLoading ? (
+          <div className="text-center">
+            <div className="text-5xl mb-3 animate-pulse">🌙</div>
+            <p className="text-gray-500 font-medium">루틴 불러오는 중...</p>
+          </div>
+        ) : (
+          <p className="text-gray-400">루틴을 찾을 수 없어요 😅</p>
+        )}
       </div>
     )
   }
@@ -223,7 +280,7 @@ export default function KidRoutineExecutePage() {
           <button
             onClick={() => {
               resetSession()
-              router.replace('/routine/kid')
+              router.replace('/routine/kid?list=1')
             }}
             className="w-12 h-12 rounded-full bg-white shadow flex items-center justify-center"
           >
@@ -262,10 +319,11 @@ export default function KidRoutineExecutePage() {
         </div>
       </div>
 
-      <div className="px-5 pt-4 flex flex-col gap-4">
-        {/* 대기 중인 카드 (흐릿하게 상단에) */}
+      {/* 카드 그리드: 2열 배치로 한 화면에 여러 카드가 보이도록, 이미지 위·텍스트 아래 세로형 카드 */}
+      <div className="px-4 pt-4 grid grid-cols-2 gap-4">
+        {/* 대기 중인 카드 (흐릿하게 상단에). 인사하기 카드는 숨김 */}
         {routine.items
-          .filter((item) => pendingConfirmItems.includes(item.id))
+          .filter((item) => !isHiddenFromRoutine(item) && pendingConfirmItems.includes(item.id))
           .map((item) => (
             <MissionCard
               key={`pending-${item.id}`}
@@ -281,6 +339,7 @@ export default function KidRoutineExecutePage() {
         <AnimatePresence>
           {routine.items
             .filter((item) =>
+              !isHiddenFromRoutine(item) &&
               !sessionCompletedItems.includes(item.id) &&
               !pendingConfirmItems.includes(item.id)
             )
@@ -345,8 +404,15 @@ export default function KidRoutineExecutePage() {
             onClose={() => {
               markRewardShown(routineId)
               setShowReward(false)
-              resetSession()
-              router.replace('/routine/kid')
+              const todayRoutines = getTodayRoutines(routines)
+              const eveningRoutine = todayRoutines.find((r) => r.type === 'evening')
+              if (routine?.type === 'morning' && eveningRoutine) {
+                // 저녁 루틴으로 이동 시에는 resetSession 하지 않음 → 저녁 페이지에서 루틴을 정상 로드
+                router.replace(`/routine/kid/${eveningRoutine.id}`)
+              } else {
+                resetSession()
+                router.replace('/routine/kid')
+              }
             }}
           />
         )}

@@ -6,22 +6,31 @@
  * 알림 페이지 "자녀 루틴 확인"에서 ?childId= 로 특정 자녀를 지정할 수 있어요.
  */
 
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, CheckCircle2, XCircle } from 'lucide-react'
-import { useKidRoutineStore, selectRoutines } from '@/lib/stores/kidRoutineStore'
+import { ArrowLeft, CheckCircle2, XCircle, Pencil } from 'lucide-react'
+import { useKidRoutineStore, selectRoutinesForProfile, EMPTY_PENDING_ENTRIES } from '@/lib/stores/kidRoutineStore'
 import { useProfileStore } from '@/lib/stores/profileStore'
 import { usePetStore } from '@/lib/stores/petStore'
 import { GiveStickerPanel } from '@/components/parent/GiveStickerPanel'
+import { RoutineEditPanel } from '@/components/parent/RoutineEditPanel'
 import confetti from 'canvas-confetti'
 
-/** useSearchParams()를 쓰는 실제 대시보드 내용 — Suspense 경계 안에서만 렌더링됩니다 */
+/**
+ * useSearchParams()를 쓰는 실제 대시보드 내용 — Suspense 경계 안에서만 렌더링됩니다.
+ * getServerSnapshot 무한루프 방지: 프로필·확인대기 목록은 스토어의 안정 참조만 구독하고, 파생 값은 useMemo로 계산합니다.
+ */
 function ParentDashboardContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { getChildProfiles } = useProfileStore()
-  const children = getChildProfiles()
+
+  // 프로필: getChildProfiles() 대신 profiles 구독 후 파생 — 매 렌더마다 새 배열을 반환하지 않도록 함
+  const profiles = useProfileStore((s) => s.profiles)
+  const children = useMemo(
+    () => profiles.filter((p) => p.role === 'child_preschool' || p.role === 'child_school'),
+    [profiles]
+  )
   const queryChildId = searchParams.get('childId')
   const selectedChild = queryChildId
     ? children.find((c) => c.id === queryChildId) ?? children[0]
@@ -29,17 +38,28 @@ function ParentDashboardContent() {
   const childId = selectedChild?.id ?? null
   const childName = selectedChild?.name ?? '우리 아이'
 
+  // 하이드레이션 불일치 방지: 서버/초기 클라이언트는 프로필이 없어 "우리 아이"만 보이므로, 마운트 후에만 실제 이름 표시
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  const displayName = mounted ? childName : '우리 아이'
+
   const setCurrentProfileId = useKidRoutineStore((s) => s.setCurrentProfileId)
   const initRoutines = useKidRoutineStore((s) => s.initRoutines)
-  const routines = useKidRoutineStore(selectRoutines)
-  const pendingConfirmItems = useKidRoutineStore((s) => s.pendingConfirmItems)
+  const routines = useKidRoutineStore(selectRoutinesForProfile(childId ?? null))
+  // 확인 대기: getPendingConfirmItemsForProfile()는 매번 새 배열을 반환하므로, pendingConfirms(안정 참조)만 구독 후 useMemo로 id 목록 계산
+  const pendingConfirms = useKidRoutineStore((s) =>
+    childId && s.byProfile[childId] ? s.byProfile[childId].pendingConfirms : EMPTY_PENDING_ENTRIES
+  )
+  const pendingConfirmItems = useMemo(() => pendingConfirms.map((p) => p.itemId), [pendingConfirms])
   const parentApproveForRoutine = useKidRoutineStore((s) => s.parentApproveForRoutine)
   const parentReject = useKidRoutineStore((s) => s.parentReject)
   const getTodayLogForProfile = useKidRoutineStore((s) => s.getTodayLogForProfile)
-  const { addFood } = usePetStore()
+  const addFoodForProfile = usePetStore((s) => s.addFood)
   const [allDone, setAllDone] = useState(false)
+  /** 자녀 루틴 화면 상단에 루틴 수정 패널을 펼쳐 보여줄지 여부 (true면 수정 UI가 상단에 표시됨) */
+  const [showEditPanel, setShowEditPanel] = useState(false)
 
-  // 자녀 프로필로 전환하고 루틴 초기화 (학령기면 학령기 기본 루틴)
+  // 자녀 프로필로 전환하고 루틴 초기화 — 완료/확인 대기 데이터가 이 프로필 기준으로 persist에서 읽힘
   useEffect(() => {
     if (childId) {
       setCurrentProfileId(childId)
@@ -57,11 +77,11 @@ function ParentDashboardContent() {
   const completedCount = sessionCompletedItems.length
   const pendingCount = pendingConfirmItems.length
 
-  // 전체 완료 시 먹이 지급 + 컨페티 + 보상 페이지 이동
+  // 전체 완료 시 해당 자녀(프로필)에게만 먹이 지급 + 컨페티 + 보상 페이지 이동
   useEffect(() => {
-    if (totalCount > 0 && completedCount >= totalCount && !allDone) {
+    if (totalCount > 0 && completedCount >= totalCount && !allDone && childId) {
       setAllDone(true)
-      addFood(1)
+      addFoodForProfile(childId, 1)
       const end = Date.now() + 2000
       const frame = () => {
         confetti({ particleCount: 4, angle: 60, spread: 50, origin: { x: 0 } })
@@ -71,7 +91,7 @@ function ParentDashboardContent() {
       frame()
       setTimeout(() => router.push('/routine/parent-dashboard/reward'), 2500)
     }
-  }, [completedCount, totalCount, allDone, addFood, router])
+  }, [completedCount, totalCount, allDone, childId, addFoodForProfile, router])
 
   const pendingItemDetails = routines
     .flatMap((r) => r.items.map((item) => ({ ...item, routineId: r.id, routineTitle: r.title })))
@@ -90,13 +110,22 @@ function ParentDashboardContent() {
             <ArrowLeft className="w-5 h-5 text-gray-600" />
           </button>
           <div className="flex-1 min-w-0">
-            <p className="font-black text-gray-700 text-lg">{childName}의 오늘 루틴</p>
+            <p className="font-black text-gray-700 text-lg">{displayName}의 오늘 루틴</p>
             <p className="text-xs text-gray-400">
               {completedCount}/{totalCount} 완료
               {pendingCount > 0 && <span className="text-amber-400 ml-2">· {pendingCount}개 확인 대기</span>}
             </p>
           </div>
-          <div className="flex-shrink-0">
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setShowEditPanel(true)}
+              className={`w-10 h-10 rounded-full shadow flex items-center justify-center ${showEditPanel ? 'bg-[#FF8FAB] text-white' : 'bg-white text-gray-600'}`}
+              title="루틴 수정"
+            >
+              <Pencil className="w-5 h-5" />
+            </motion.button>
             <GiveStickerPanel compact selectedChild={selectedChild ?? null} />
           </div>
         </div>
@@ -110,11 +139,23 @@ function ParentDashboardContent() {
         </div>
       </div>
 
+      {/* 자녀 루틴 화면 상단: 루틴 수정 패널 (접이식). 펼치면 여기서 바로 수정 가능 */}
+      {showEditPanel && (
+        <div className="px-5 pt-4 pb-2 border-b border-gray-100 bg-[#FFF9F0]">
+          <RoutineEditPanel
+            childId={childId}
+            childName={childName}
+            onClose={() => setShowEditPanel(false)}
+          />
+        </div>
+      )}
+
       <div className="px-5 pt-2">
         {pendingItemDetails.length > 0 && (
           <div className="mb-6">
             <p className="text-sm font-black text-amber-500 mb-3">⏳ 확인 대기 중</p>
             <div className="flex flex-col gap-3">
+              {/* 체크(승인) 또는 X(거부) 누르면 카드가 빠르게 사라지도록 exit 애니메이션 짧게 적용 */}
               <AnimatePresence>
                 {pendingItemDetails.map((item) => (
                   <motion.div
@@ -123,9 +164,9 @@ function ParentDashboardContent() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{
-                      opacity: 0, scale: 0.85,
-                      x: 60,
-                      transition: { duration: 0.4 }
+                      opacity: 0,
+                      scale: 0.9,
+                      transition: { duration: 0.15 }
                     }}
                     className="flex items-center gap-4 bg-white rounded-2xl p-4 shadow-sm border-2 border-amber-100"
                   >

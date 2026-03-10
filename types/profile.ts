@@ -22,15 +22,22 @@ export interface FamilyProfile {
   useCustomPhoto?: boolean
   createdAt: string
 
-  // 자녀 전용: 등원·하원 시간·기관 정보 (등원 카운트다운 배너에 사용)
+  // 자녀 전용: 기상·등하원·취침 시간·기관 정보 (홈/루틴 화면 상태·카운트다운에 사용)
   childSettings?: {
     institutionType: 'kindergarten' | 'daycare' | 'elementary' | null
-    departureTime: string | null   // 집 나서는 시간 "HH:mm"
-    arrivalTime: string | null     // 등원 시간 "HH:mm"
-    returnTime: string | null      // 하원 시간 "HH:mm"
-    /** 미션별 타이머(초). { 'km-2': 120, 'ke-3': 600, ... } */
-    missionTimers?: Record<string, number>
+    /** 아침에 일어날 시간 "HH:mm" (기상 알람·낮/밤 전환에 사용) */
+    wakeTime: string | null
+    /** 집 나서는 시간 "HH:mm" (등원 카운트다운용) */
+    departureTime: string | null
+    /** 등원(등교) 시간 "HH:mm" */
+    arrivalTime: string | null
+    /** 하원(하교) 시간 "HH:mm" */
+    returnTime: string | null
+    /** 저녁에 잠자러 가는 시간 "HH:mm" (잠자리까지 남은 시간 표시용) */
+    bedtime: string | null
     institutionName?: string
+    /** @deprecated 미션별 타이머는 더 이상 설정하지 않음 (과거 데이터 호환용) */
+    missionTimers?: Record<string, number>
   }
 
   // 나의 루틴(개인) 전용: 목표 키워드 (기본 루틴 추천용)

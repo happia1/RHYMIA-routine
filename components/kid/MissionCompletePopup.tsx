@@ -1,6 +1,6 @@
 /**
  * 미션 완료 직후 보여주는 축하 팝업
- * 비개발자: 아이가 미션 카드를 탭해 "완료했어요!"라고 하면, 2초 동안 "잘했어요! 엄마한테 확인 중이에요!" 팝업을 띄웁니다.
+ * 비개발자: 아이가 미션 카드를 탭해 "완료했어요!"라고 하면, 약 0.5초 동안 루틴 이름과 "잘했어요! 🎉"만 보여주는 팝업을 띄웁니다.
  */
 
 'use client'
@@ -26,8 +26,8 @@ export function MissionCompletePopup({ show, itemIcon, itemImagePath, itemLabel,
     if (show) {
       // TTS: 미션 탭 시 귀여운 축하 문구 (밝은 여자아이 목소리)
       speak(TTS_SCRIPTS.missionTap(itemLabel))
-      // 2초 후 자동 닫기
-      const t = setTimeout(onClose, 2200)
+      // 약 0.55초 후 자동 닫기 (체류 시간 절반으로 단축)
+      const t = setTimeout(onClose, 550)
       return () => clearTimeout(t)
     }
   }, [show, itemLabel, onClose, speak])
@@ -86,12 +86,6 @@ export function MissionCompletePopup({ show, itemIcon, itemImagePath, itemLabel,
 
             <p className="text-2xl font-black text-gray-700 mb-1">{itemLabel}</p>
             <p className="text-base text-pink-400 font-bold">잘했어요! 🎉</p>
-
-            {/* "엄마/아빠 확인 중..." 안내 */}
-            <div className="mt-4 flex items-center gap-2 bg-amber-50 rounded-2xl px-4 py-2">
-              <span className="text-xl">⏳</span>
-              <p className="text-sm text-amber-600 font-semibold">엄마/아빠 확인 중...</p>
-            </div>
           </motion.div>
         </motion.div>
       )}

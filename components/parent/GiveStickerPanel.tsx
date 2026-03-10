@@ -11,10 +11,14 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Star, X, Plus } from 'lucide-react'
 import { useStickerStore } from '@/lib/stores/stickerStore'
 import { useMilestoneStore, getPoolForAge } from '@/lib/stores/milestoneStore'
+import type { Milestone } from '@/lib/stores/milestoneStore'
 import { useProfileStore } from '@/lib/stores/profileStore'
 import type { StickerEmoji } from '@/types/sticker'
 import { STICKER_LABELS } from '@/types/sticker'
 import type { FamilyProfile } from '@/types/profile'
+
+/** 스토어 구독 시 빈 배열 안정 참조 (리렌더/SSR 대응) */
+const EMPTY_MILESTONES: Milestone[] = []
 
 const STICKER_OPTIONS: StickerEmoji[] = [
   '⭐',
@@ -34,11 +38,17 @@ export function GiveStickerPanel({
   selectedChild?: FamilyProfile | null
 }) {
   const { giveSticker } = useStickerStore()
-  const {
-    getMilestones,
-    addMilestoneFromPool,
-    achieveMilestone,
-  } = useMilestoneStore()
+  const activeProfile = useProfileStore((s) => s.getActiveProfile())
+  // 스티커를 줄 대상: 부모 대시보드에서는 선택한 자녀, 없으면 현재 활성 프로필(자녀일 때)
+  const targetProfileId = selectedChild?.id ?? activeProfile?.id ?? ''
+  // 마일스톤 조회용: 자녀가 선택돼 있으면 해당 자녀, 없으면 null(레거시 단일 목록). useMilestoneStore보다 먼저 정의해야 함
+  const childProfileId = selectedChild?.id ?? null
+  // 스토어 상태 구독: byProfile이 바뀌어야 추가 후 상·하위 리스트가 갱신됨 (getMilestones()만 쓰면 구독이 안 되어 반영 안 됨)
+  const milestones = useMilestoneStore((s) =>
+    childProfileId ? (s.byProfile[childProfileId] ?? EMPTY_MILESTONES) : s.milestones
+  )
+  const addMilestoneFromPool = useMilestoneStore((s) => s.addMilestoneFromPool)
+  const achieveMilestone = useMilestoneStore((s) => s.achieveMilestone)
   const parentName =
     useProfileStore((s) => s.getActiveProfile())?.name ?? '엄마'
 
@@ -53,9 +63,7 @@ export function GiveStickerPanel({
   const [justGiven, setJustGiven] = useState(false)
   const [givenEmoji, setGivenEmoji] = useState<StickerEmoji>('⭐')
 
-  // 자녀가 선택돼 있으면 해당 자녀 마일스톤, 없으면 레거시 단일 목록
-  const childProfileId = selectedChild?.id ?? null
-  const milestones = getMilestones(childProfileId)
+  // 자녀가 선택돼 있으면 해당 자녀 마일스톤, 없으면 레거시 단일 목록 (milestones는 위에서 스토어 구독으로 가져옴)
   const unachieved = milestones.filter((m) => !m.isAchieved)
   // 연령대별 풀 (마일스톤 탭에서 "추가"할 수 있는 후보). 자녀 역할이 child_preschool / child_school일 때만 의미 있음
   const pool =
@@ -63,19 +71,22 @@ export function GiveStickerPanel({
     selectedChild?.role === 'child_school'
       ? getPoolForAge(selectedChild.role)
       : []
+  // 이미 상위 리스트에 추가된 마일스톤은 하위 리스트에서 제외 (추가 시 하위에서 사라지게)
   const addedImageKeys = new Set(milestones.map((m) => m.imageKey))
+  const poolNotYetAdded = pool.filter((t) => !addedImageKeys.has(t.imageKey))
 
   const handleGive = () => {
+    if (!targetProfileId) return
     if (mode === 'milestone' && selectedMilestone) {
       achieveMilestone(childProfileId, selectedMilestone)
       const ms = milestones.find((m) => m.id === selectedMilestone)
       const emoji = (ms?.stickerEmoji ?? '🏆') as StickerEmoji
-      giveSticker(emoji, parentName, `마일스톤: ${ms?.title}`)
+      giveSticker(targetProfileId, emoji, parentName, `마일스톤: ${ms?.title}`)
       setGivenEmoji(emoji)
     } else {
       const label =
         mode === 'routine' ? '루틴 완료' : '특별히 잘했어요'
-      giveSticker(selectedEmoji, parentName, label)
+      giveSticker(targetProfileId, selectedEmoji, parentName, label)
       setGivenEmoji(selectedEmoji)
     }
     setJustGiven(true)
@@ -219,15 +230,18 @@ export function GiveStickerPanel({
                                 )}
                               </div>
                             </div>
-                            {/* 2) 연령대별 풀 — 부모가 "추가"하면 자녀 미션 페이지에 연동 */}
+                            {/* 2) 연령대별 풀 — 부모가 "추가"하면 상위 리스트로 올라가고, 여기서는 사라짐 (추가 안 된 것만 표시) */}
                             <div>
                               <p className="text-xs font-bold text-gray-500 mb-2">
                                 ➕ 아이 미션에 추가할 마일스톤 ({selectedChild.role === 'child_school' ? '학령기' : '미취학'} 기준)
                               </p>
                               <div className="max-h-[28vh] overflow-y-auto flex flex-col gap-2">
-                                {pool.map((t) => {
-                                  const alreadyAdded = addedImageKeys.has(t.imageKey)
-                                  return (
+                                {poolNotYetAdded.length === 0 ? (
+                                  <p className="text-sm text-gray-400 py-2">
+                                    추가할 마일스톤이 없어요. 위 목록에 모두 추가된 상태예요.
+                                  </p>
+                                ) : (
+                                  poolNotYetAdded.map((t) => (
                                     <div
                                       key={t.imageKey}
                                       className="flex items-center gap-3 p-3 rounded-xl border-2 border-gray-100 bg-white"
@@ -245,22 +259,17 @@ export function GiveStickerPanel({
                                       </div>
                                       <button
                                         type="button"
-                                        disabled={alreadyAdded}
                                         onClick={() =>
                                           addMilestoneFromPool(selectedChild.id, t)
                                         }
-                                        className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
-                                          alreadyAdded
-                                            ? 'bg-gray-100 text-gray-400 cursor-default'
-                                            : 'bg-[#FF8FAB] text-white'
-                                        }`}
+                                        className="flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-black bg-[#FF8FAB] text-white transition-all"
                                       >
                                         <Plus className="w-3.5 h-3.5" />
-                                        {alreadyAdded ? '추가됨' : '추가'}
+                                        추가
                                       </button>
                                     </div>
-                                  )
-                                })}
+                                  ))
+                                )}
                               </div>
                             </div>
                           </>
