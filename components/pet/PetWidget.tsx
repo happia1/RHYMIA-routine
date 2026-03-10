@@ -3,26 +3,38 @@
 /**
  * 캐릭터 위젯 (먹이 → 성장)
  * 비개발자: 펫 이모지, 이름, 성장 단계, 성장 바를 보여주고, pendingFood가 있으면 "먹이 주기" 버튼으로 한 번에 먹여요.
+ * 프로필별로 펫이 분리되어 있어서 profileId를 받거나, 없으면 활성 프로필을 사용해요.
  */
 
 import { motion, AnimatePresence } from 'framer-motion'
-import { usePetStore, PET_META } from '@/lib/stores/petStore'
+import { usePetStore, PET_META, DEFAULT_PET_STATE } from '@/lib/stores/petStore'
+import { useProfileStore } from '@/lib/stores/profileStore'
 
 interface PetWidgetProps {
   showFeedButton?: boolean
+  /** 표시할 자녀 프로필 ID (없으면 활성 프로필 사용) */
+  profileId?: string | null
 }
 
 const STAGE_LABELS = ['알', '아기', '소년', '청년', '어른']
 
-export function PetWidget({ showFeedButton = false }: PetWidgetProps) {
-  const {
-    species, name, stage, pendingFood,
-    feedPet, getEmoji, getProgress, isEating, totalFed, getNextStageExp
-  } = usePetStore()
+export function PetWidget({ showFeedButton = false, profileId: profileIdProp }: PetWidgetProps) {
+  const activeProfileId = useProfileStore((s) => s.activeProfileId)
+  const profileId = profileIdProp ?? activeProfileId
 
-  const emoji = getEmoji()
-  const progress = getProgress()
-  const nextExp = getNextStageExp()
+  const { species, name, stage, pendingFood, isEating, totalFed } = usePetStore((s) =>
+    profileId ? (s.byProfile[profileId] ?? DEFAULT_PET_STATE) : DEFAULT_PET_STATE
+  )
+  const feedPet = usePetStore((s) => s.feedPet)
+  const getEmoji = usePetStore((s) => s.getEmoji)
+  const getProgress = usePetStore((s) => s.getProgress)
+  const getNextStageExp = usePetStore((s) => s.getNextStageExp)
+
+  if (!profileId) return null
+
+  const emoji = getEmoji(profileId)
+  const progress = getProgress(profileId)
+  const nextExp = getNextStageExp(profileId)
   const stageLabel = STAGE_LABELS[stage]
 
   if (!species) return null
@@ -98,7 +110,7 @@ export function PetWidget({ showFeedButton = false }: PetWidgetProps) {
           initial={{ scale: 0, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           whileTap={{ scale: 0.93 }}
-          onClick={feedPet}
+          onClick={() => feedPet(profileId)}
           disabled={isEating}
           className="mt-4 bg-gradient-to-r from-[#FF8FAB] to-[#FFD93D] text-white font-black px-6 py-3 rounded-2xl shadow-lg disabled:opacity-50 flex items-center gap-2"
         >

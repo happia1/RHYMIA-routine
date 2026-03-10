@@ -11,7 +11,6 @@ import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Check } from 'lucide-react'
 import { useOnboardingStore } from '@/lib/stores/onboardingStore'
-import { usePetStore } from '@/lib/stores/petStore'
 import { PetSelector } from '@/components/onboarding/PetSelector'
 import { PetSpecies, PET_META } from '@/types/pet'
 import type { ProfileRole } from '@/types/profile'
@@ -22,8 +21,7 @@ type Gender = 'girl' | 'boy'
 
 export default function ChildOnboardingPage() {
   const router = useRouter()
-  const { setChildRole, setChildGender } = useOnboardingStore()
-  const { selectPet } = usePetStore()
+  const { setChildRole, setChildGender, setSelectedPetSpecies } = useOnboardingStore()
 
   const [step, setStep] = useState<Step>('age')
   const [selectedAge, setSelectedAge] = useState<AgeType | null>(null)
@@ -48,7 +46,7 @@ export default function ChildOnboardingPage() {
 
   const handlePetConfirm = () => {
     if (!selectedPet) return
-    selectPet(selectedPet)
+    setSelectedPetSpecies(selectedPet)
     router.push('/onboarding/profile-setup')
   }
 

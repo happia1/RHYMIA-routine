@@ -6,7 +6,7 @@
 
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -32,7 +32,8 @@ const ROUTINE_TYPE_META = {
   special: { emoji: '⭐', label: '특별 루틴', color: 'from-[#FFD93D] to-[#A8E6CF]' },
 }
 
-export default function KidRoutineMainPage() {
+/** useSearchParams 사용 본문 (Suspense 경계 안에서만 렌더) */
+function KidRoutineMainContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const activeProfile = useProfileStore((s) => s.getActiveProfile())
@@ -245,5 +246,20 @@ export default function KidRoutineMainPage() {
         })}
       </div>
     </div>
+  )
+}
+
+/** 자녀 루틴 메인 페이지: useSearchParams를 Suspense로 감싸 정적 생성 시 오류 방지 */
+export default function KidRoutineMainPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#FFF9F0] flex items-center justify-center">
+          <p className="text-gray-500">로딩 중...</p>
+        </div>
+      }
+    >
+      <KidRoutineMainContent />
+    </Suspense>
   )
 }

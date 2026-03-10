@@ -14,6 +14,7 @@ import { ArrowLeft, Check } from 'lucide-react'
 import { useProfileStore } from '@/lib/stores/profileStore'
 import { useKidRoutineStore } from '@/lib/stores/kidRoutineStore'
 import { useOnboardingStore } from '@/lib/stores/onboardingStore'
+import { usePetStore } from '@/lib/stores/petStore'
 import { ProfileImagePicker } from '@/components/profile/ProfileImagePicker'
 import { ProfileRole, ROLE_META } from '@/types/profile'
 
@@ -44,10 +45,12 @@ function ProfileSetupContent() {
   const searchParams = useSearchParams()
   const childRole = useOnboardingStore((s) => s.childRole)
   const childGender = useOnboardingStore((s) => s.childGender)
+  const selectedPetSpecies = useOnboardingStore((s) => s.selectedPetSpecies)
   const resetOnboarding = useOnboardingStore((s) => s.reset)
   const role = (childRole ?? searchParams.get('role')) as ProfileRole
   const { addProfile, setActiveProfile } = useProfileStore()
   const { setCurrentProfileId, setWakeAlarmTime } = useKidRoutineStore()
+  const selectPet = usePetStore((s) => s.selectPet)
 
   const isChild = role === 'child_preschool' || role === 'child_school'
   const isParent = role === 'mom' || role === 'dad'
@@ -82,7 +85,7 @@ function ProfileSetupContent() {
       name: name.trim(),
       role,
       avatarEmoji: selectedEmoji,
-      avatarColor: selectedColor,
+      avatarColor: DEFAULT_AVATAR_COLOR,
       gender: isChild ? childGender ?? undefined : undefined,
       customPhotoBase64: customPhotoBase64 ?? undefined,
       useCustomPhoto: !!customPhotoBase64,
@@ -102,6 +105,7 @@ function ProfileSetupContent() {
     if (isChild) {
       setCurrentProfileId(newProfile.id)
       setWakeAlarmTime(wakeTime || '07:00')
+      if (selectedPetSpecies) selectPet(newProfile.id, selectedPetSpecies)
     }
     resetOnboarding()
 
