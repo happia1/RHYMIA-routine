@@ -49,9 +49,9 @@ export const ROUTINE_IMAGES: Record<string, string> = {
   'good-night': `${R}/night/good-night.png`,
 
   // [특별미션] special 폴더 — 사용자 지정 순서·파일명 그대로 매칭 (Botton→Button, dringk→drink)
+  // 'clean-after-meal'은 위 afternoon-daytime에 이미 정의됨 (동일 키 중복 제거)
   'eat-all': `${R}/special/eat-all.png`,
   'eat-vegitables': `${R}/special/eat-vegitables.png`,
-  'clean-after-meal': `${R}/special/clean-after-meal.png`,
   'Button-up': `${R}/special/Button-up.png`,
   'drink-water': `${R}/special/drink-water.png`,
   'greeting_well': `${R}/special/greeting_well.png`,
@@ -171,7 +171,7 @@ export const LABEL_TO_IMAGE_KEY: Record<string, string> = {
   '식탁 정리 돕기': 'clean-after-meal',
   '잠옷 갈아입기': 'change-pajama',
   '샤워하기': 'shower',
-  '잠자기': 'good-night',
+  // '잠자기'는 위쪽에서 이미 'bedtime'으로 매핑됨 (중복 제거)
 }
 
 const makeItem = (

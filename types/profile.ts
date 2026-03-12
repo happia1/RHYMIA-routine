@@ -35,6 +35,8 @@ export interface FamilyProfile {
     returnTime: string | null
     /** 저녁에 잠자러 가는 시간 "HH:mm" (잠자리까지 남은 시간 표시용) */
     bedtime: string | null
+    /** 기상 알람 on/off */
+    alarmWakeEnabled?: boolean
     /** 집 나서는 시간 알람 on/off (기본 true) */
     alarmDepartureEnabled?: boolean
     /** 등원 시간 알람 on/off (기본 true) */
@@ -43,6 +45,16 @@ export interface FamilyProfile {
     alarmReturnEnabled?: boolean
     /** 자러 갈 시간 알람 on/off (기본 true) */
     alarmBedtimeEnabled?: boolean
+    /** 기상 알람 소리 파일 경로 */
+    alarmSoundWake?: string
+    /** 등원 알람 소리 파일 경로 */
+    alarmSoundDeparture?: string
+    /** 등원 도착 알람 소리 파일 경로 */
+    alarmSoundArrival?: string
+    /** 하원 알람 소리 파일 경로 */
+    alarmSoundReturn?: string
+    /** 잠자리 알람 소리 파일 경로 */
+    alarmSoundBedtime?: string
     institutionName?: string
     /** @deprecated 미션별 타이머는 더 이상 설정하지 않음 (과거 데이터 호환용) */
     missionTimers?: Record<string, number>

@@ -11,6 +11,7 @@ import { motion } from 'framer-motion'
 import { ArrowLeft } from 'lucide-react'
 import { useKidRoutineStore, selectWakeAlarmTime, selectAlarmEnabled } from '@/lib/stores/kidRoutineStore'
 import { useProfileStore } from '@/lib/stores/profileStore'
+import type { FamilyProfile } from '@/types/profile'
 import { useEffect } from 'react'
 
 function toHHmm(h: number, m: number): string {
@@ -142,7 +143,8 @@ export default function KidAlarmSettingsPage() {
     setCurrentProfileId(activeProfile?.id ?? null)
   }, [activeProfile?.id, setCurrentProfileId])
 
-  const cs = activeProfile?.childSettings ?? {}
+  /** 자녀 설정 (없으면 빈 객체. 타입만 맞춰서 기본값은 아래 ?? 로 처리) */
+  const cs: Partial<NonNullable<FamilyProfile['childSettings']>> = activeProfile?.childSettings ?? {}
   const departureTime = cs.departureTime ?? '08:00'
   const arrivalTime = cs.arrivalTime ?? '09:00'
   const returnTime = cs.returnTime ?? '14:00'
@@ -153,10 +155,19 @@ export default function KidAlarmSettingsPage() {
   const alarmReturnEnabled = cs.alarmReturnEnabled ?? true
   const alarmBedtimeEnabled = cs.alarmBedtimeEnabled ?? true
 
-  const updateChildSettings = (patch: Partial<NonNullable<typeof cs>>) => {
+  /** 자녀 설정 일부만 바꿀 때: 필수 필드 기본값 위에 기존 설정·패치를 겹쳐서 전체 객체로 넘김 */
+  const updateChildSettings = (patch: Partial<NonNullable<FamilyProfile['childSettings']>>) => {
     if (!activeProfile?.id) return
+    const defaults: NonNullable<FamilyProfile['childSettings']> = {
+      institutionType: null,
+      wakeTime: null,
+      departureTime: '08:00',
+      arrivalTime: '09:00',
+      returnTime: '14:00',
+      bedtime: '21:00',
+    }
     updateProfile(activeProfile.id, {
-      childSettings: { ...cs, ...patch },
+      childSettings: { ...defaults, ...cs, ...patch },
     })
   }
 

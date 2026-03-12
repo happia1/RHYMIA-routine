@@ -208,8 +208,8 @@ function StaticRoutineCard({
       }
       exit={{ opacity: 0, scale: 0.3 }}
       transition={{ duration: 0.25, ease: 'easeIn' }}
-      onAnimationComplete={(definition) => {
-        if (isExiting && definition?.opacity === 0 && onExitComplete) onExitComplete()
+      onAnimationComplete={() => {
+        if (isExiting && onExitComplete) onExitComplete()
       }}
       className={isExiting ? 'pointer-events-none' : ''}
     >

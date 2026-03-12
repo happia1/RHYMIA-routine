@@ -29,6 +29,9 @@ const ALARM_OPTIONS = [
   { id: 'rooster', label: 'rooster', path: '/sound/morning_alarm-rooster.wav' },
 ] as const
 
+/** 알람음 파일 경로 타입 (옵션 중 하나). setState에 다른 옵션을 넣을 수 있도록 사용 */
+type AlarmSoundPath = (typeof ALARM_OPTIONS)[number]['path']
+
 /** 프로필 배경용 기본 색상 (배경 색상 선택 기능 제거 후 고정값) */
 const DEFAULT_AVATAR_COLOR = '#FF8FAB'
 
@@ -89,11 +92,11 @@ function ProfileSetupContent() {
   const [alarmBedtimeOn, setAlarmBedtimeOn] = useState(true)
 
   /** 각 시간 블록별 선택한 알람음 (파일 경로). 기본값: countdown */
-  const [alarmSoundWake, setAlarmSoundWake] = useState(ALARM_OPTIONS[0].path)
-  const [alarmSoundDeparture, setAlarmSoundDeparture] = useState(ALARM_OPTIONS[0].path)
-  const [alarmSoundArrival, setAlarmSoundArrival] = useState(ALARM_OPTIONS[0].path)
-  const [alarmSoundReturn, setAlarmSoundReturn] = useState(ALARM_OPTIONS[0].path)
-  const [alarmSoundBedtime, setAlarmSoundBedtime] = useState(ALARM_OPTIONS[0].path)
+  const [alarmSoundWake, setAlarmSoundWake] = useState<AlarmSoundPath>(ALARM_OPTIONS[0].path)
+  const [alarmSoundDeparture, setAlarmSoundDeparture] = useState<AlarmSoundPath>(ALARM_OPTIONS[0].path)
+  const [alarmSoundArrival, setAlarmSoundArrival] = useState<AlarmSoundPath>(ALARM_OPTIONS[0].path)
+  const [alarmSoundReturn, setAlarmSoundReturn] = useState<AlarmSoundPath>(ALARM_OPTIONS[0].path)
+  const [alarmSoundBedtime, setAlarmSoundBedtime] = useState<AlarmSoundPath>(ALARM_OPTIONS[0].path)
 
   /** 미리듣기 재생 중인 Audio (한 번에 하나만 재생) */
   const previewAudioRef = useRef<HTMLAudioElement | null>(null)

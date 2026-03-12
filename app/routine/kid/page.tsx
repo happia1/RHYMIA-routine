@@ -31,7 +31,6 @@ import type { RoutineItem } from '@/types/routine'
 import { isWakeTimeNow, isMorningTime, isEveningTime } from '@/lib/utils/sleepSchedule'
 import { PetLevelBlock } from '@/components/kid/PetGrowthHUD'
 import { WakeAlarmOverlay } from '@/components/kid/WakeAlarmOverlay'
-import { DepartureBanner } from '@/components/kid/DepartureBanner'
 import { DateBar } from '@/components/kid/DateBar'
 import { RoutineCardList, type RoutineItemEntry } from '@/components/kid/RoutineCardList'
 import { RewardScreen } from '@/components/kid/RewardScreen'
@@ -487,11 +486,9 @@ function KidRoutineMainContent() {
           className="flex-shrink-0 min-h-[50vh] flex flex-col bg-cover bg-center bg-no-repeat -mx-3 rounded-b-2xl overflow-hidden"
           style={{ backgroundImage: 'url(/background/room_background.png)' }}
         >
-          <div className="px-3 pt-2">
-            <DepartureBanner variant="inline" />
-          </div>
+          {/* 일어날 시간 바는 상단바(TopProfileBar)로 이동됨 */}
           {/* 캐릭터 영역: 레벨 블록은 왼쪽 상단(화면 안쪽), 캐릭터는 배경 중앙 */}
-          <div className="relative flex-1 flex items-center justify-center min-h-[180px] px-3">
+          <div className="relative flex-1 flex items-center justify-center min-h-[180px] px-3 pt-2">
             {/* 레벨 블록: 왼쪽 상단, 화면 안쪽으로 정렬 (잘림 방지) */}
             <div className="absolute left-3 top-3 z-10">
               <PetLevelBlock
