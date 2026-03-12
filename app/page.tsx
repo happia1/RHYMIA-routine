@@ -64,15 +64,15 @@ export default function HomePage() {
         <motion.div
           initial={{ opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex items-stretch justify-between gap-4"
+          className="relative flex items-stretch justify-between gap-4"
         >
-          {/* 왼쪽: 시간 / 줄바꿈 / 날짜 — 아래 정렬해 빨간 박스 영역(날씨 블록과 같은 높이) 안에 배치 */}
-          <div className="flex flex-col justify-end min-h-[72px] h-[72px]">
+          {/* 화면 중앙: 시간 / 줄바꿈 / 날짜 — 숫자를 기준으로 화면 가운데에 고정해서 보여줘요 */}
+          <div className="absolute left-1/2 -translate-x-1/2 flex flex-col justify-end items-center text-center min-h-[72px] h-[72px]">
             <h1 className="font-black text-gray-800 tracking-tight flex items-baseline gap-2 leading-none">
               {ampmStr && <span className="text-[20px] font-black">{ampmStr}</span>}
               <span className="text-[4rem]">{timePartStr}</span>
             </h1>
-            <p className="text-gray-400 text-sm leading-tight mt-0.5">{dateStr}</p>
+            <p className="text-gray-400 text-sm leading-tight mt-0.5 text-center">{dateStr}</p>
           </div>
 
           {/* 오른쪽 상단: 날씨 — 아이콘 위, 텍스트 아래 세로 배치, 크기 확대 */}

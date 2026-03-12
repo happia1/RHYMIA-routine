@@ -12,10 +12,8 @@
  * 앱 열기
  *   → localStorage 복원 (hydration)
  *   → profiles 있음? → ensureActiveProfile() → activeProfileId 복구
- *     → 현재 경로가 /onboarding이면? → 홈(/)으로 이동 (이미 프로필 있으므로)
- *     → 현재 경로가 일반 페이지면? → 그대로 유지 ✅
- *   → profiles 없음?
- *     → /onboarding으로 이동
+ *     → 온보딩 경로여도 리다이렉트하지 않음 (프로필 추가로 진입한 경우 허용)
+ *   → profiles 없음? → /onboarding으로 이동
  */
 
 'use client'
@@ -61,13 +59,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       return
     }
 
-    // 프로필이 있으면 activeProfileId 자동복구
+    // 프로필이 있으면 activeProfileId 자동복구 (온보딩 경로는 그대로 둠 — 프로필 추가 시 /onboarding 진입 허용)
     ensureActiveProfile()
-
-    // 프로필이 있는데 온보딩 화면에 있으면 홈으로
-    if (isOnboarding) {
-      router.replace('/')
-    }
   }, [hasHydrated, profiles.length, isOnboarding, router, ensureActiveProfile])
 
   // hydration 전: 빈 화면 (레이아웃 깜빡임 방지)

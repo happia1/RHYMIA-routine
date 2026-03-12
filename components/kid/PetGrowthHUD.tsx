@@ -49,7 +49,7 @@ export function PetLevelBlock({
   starGaugeRef,
 }: PetLevelBlockProps) {
   return (
-    <div className="flex-shrink-0 min-w-[120px] w-[140px] flex flex-col justify-center gap-1.5 rounded-2xl bg-white/60 backdrop-blur-md px-2.5 py-3 shadow-lg border border-white/50">
+    <div className="flex-shrink-0 min-w-[120px] w-[150px] min-h-[130px] flex flex-col justify-center gap-2 rounded-2xl bg-white/60 backdrop-blur-md px-3 py-5 shadow-lg border border-white/50">
       {/* 투명 글래스 효과: 배경 반투명 + 블러 */}
       {/* LV 레벨 + EXP 바 (하트/별 5개 시 날아오는 목표) */}
       <div className="flex items-center justify-between mb-0.5">

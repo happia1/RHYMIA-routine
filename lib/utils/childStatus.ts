@@ -6,10 +6,11 @@
 import type { FamilyProfile } from '@/types/profile'
 
 export type ChildStatusType =
-  | 'departure'      // 등원 전: 출발까지 N분
-  | 'at_institution' // 등원 후 ~ 하원 전: 유치원/학교 활동 중
-  | 'bedtime'        // 저녁: 잠자리까지 N분
-  | null             // 표시할 상태 없음
+  | 'departure'       // 등원 전: 출발까지 N분
+  | 'at_institution'  // 등원 후 ~ 하원 전: 유치원/학교 활동 중
+  | 'after_school'    // 하원 후: 집에서 보내는 시간
+  | 'bedtime'         // 저녁: 잠자리까지 N분
+  | null              // 표시할 상태 없음
 
 export interface ChildStatusResult {
   type: ChildStatusType
@@ -29,18 +30,20 @@ const INSTITUTION_LABELS: Record<string, string> = {
  * 현재 시각 기준 자녀의 시간대별 상태와 표시 문구를 반환합니다.
  */
 export function getChildStatus(profile: FamilyProfile): ChildStatusResult | null {
+  // 프로필 설정에 등원/하원/취침 시간이 들어 있으면 그 값을 우선 사용하고,
+  // 아무 설정이 없거나(또는 어떤 구간에도 안 걸리는 경우)에는 "시계 기준 기본 규칙"으로 fallback 해요.
   const settings = profile.childSettings
-  if (!settings) return null
 
   const now = new Date()
-  const currentMinutes = now.getHours() * 60 + now.getMinutes()
+  const hours = now.getHours()
+  const currentMinutes = hours * 60 + now.getMinutes()
 
-  const arrival = settings.arrivalTime
-  const returnTime = settings.returnTime
-  const departureTime = settings.departureTime
-  const bedtime = settings.bedtime
+  const arrival = settings?.arrivalTime
+  const returnTime = settings?.returnTime
+  const departureTime = settings?.departureTime
+  const bedtime = settings?.bedtime
 
-  // 등원·하원 시간이 있으면: 등원 전 → 출발 카운트다운, 등원~하원 → 활동 중, 저녁 → 잠자리 카운트다운
+  // 1) 설정 기반 정밀 계산
   if (arrival && departureTime) {
     const [ah, am] = arrival.split(':').map(Number)
     const arrivalMinutes = ah * 60 + am
@@ -52,15 +55,23 @@ export function getChildStatus(profile: FamilyProfile): ChildStatusResult | null
       const [rh, rm] = returnTime.split(':').map(Number)
       const returnMinutes = rh * 60 + rm
       if (currentMinutes >= arrivalMinutes && currentMinutes < returnMinutes) {
-        const inst = settings.institutionType
+        const inst = settings?.institutionType
         const place = inst ? INSTITUTION_LABELS[inst] ?? '기관' : '유치원'
         return {
           type: 'at_institution',
           label: `${place} 활동 중`,
         }
       }
+      // 하원 후: 저녁 시간대(예: 17시) 전까지는 "엄마와 함께하는 시간"으로 표시
+      const eveningStart = 17 * 60
+      if (currentMinutes >= returnMinutes && currentMinutes < eveningStart) {
+        return {
+          type: 'after_school',
+          label: '엄마와 함께하는 시간',
+        }
+      }
     } else if (currentMinutes >= arrivalMinutes && currentMinutes < 18 * 60) {
-      const inst = settings.institutionType
+      const inst = settings?.institutionType
       const place = inst ? INSTITUTION_LABELS[inst] ?? '기관' : '유치원'
       return { type: 'at_institution', label: `${place} 활동 중` }
     }
@@ -92,7 +103,7 @@ export function getChildStatus(profile: FamilyProfile): ChildStatusResult | null
     }
   }
 
-  // 저녁: 잠자리까지 남은 시간 (취침 2시간 전부터 표시)
+  // 2) 저녁: 잠자리까지 남은 시간 (취침 2시간 전부터 표시)
   if (bedtime) {
     const [bh, bm] = bedtime.split(':').map(Number)
     let bedtimeMinutes = bh * 60 + bm
@@ -112,5 +123,36 @@ export function getChildStatus(profile: FamilyProfile): ChildStatusResult | null
     }
   }
 
-  return null
+  /**
+   * 3) Fallback: 설정이 없거나 위 조건에 안 걸릴 때
+   *    - 아침(06~09시 미만): 등원 전, 버스가 오고있어요
+   *    - 등원 시간대(09~15시 미만): 유치원/학교 활동 중
+   *    - 잠자는 시간(21~다음날 07시 미만): 잠자는 중
+   *    - 나머지 시간: 엄마와 함께하는 시간
+   */
+  if (hours >= 6 && hours < 9) {
+    return {
+      type: 'departure',
+      label: '버스가 오고있어요',
+    }
+  }
+
+  if (hours >= 9 && hours < 15) {
+    return {
+      type: 'at_institution',
+      label: '유치원 활동 중',
+    }
+  }
+
+  if (hours >= 21 || hours < 7) {
+    return {
+      type: 'bedtime',
+      label: '잠자는 중',
+    }
+  }
+
+  return {
+    type: 'after_school',
+    label: '엄마와 함께하는 시간',
+  }
 }

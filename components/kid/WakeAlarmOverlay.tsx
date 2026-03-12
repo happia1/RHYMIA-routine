@@ -53,9 +53,14 @@ export function WakeAlarmOverlay({ onDismiss }: WakeAlarmOverlayProps) {
       <motion.div
         animate={{ scale: [1, 1.05, 1] }}
         transition={{ duration: 1, repeat: Infinity }}
-        className="text-8xl mb-6"
+        className="mb-6"
       >
-        ⏰
+        {/* 알람이 울릴 때 보여줄 시계 이미지 — 디자인 팀이 넣어둔 아이콘을 그대로 사용합니다. */}
+        <img
+          src="/routine-icons/icons/status/clock.png"
+          alt="알람 시계 아이콘"
+          className="w-32 h-32 object-contain drop-shadow-lg"
+        />
       </motion.div>
       <h1 className="text-3xl font-black text-white text-center mb-2">좋은 아침이에요!</h1>
       <p className="text-white/90 text-lg text-center mb-10">오늘의 루틴을 시작해볼까요?</p>

@@ -302,8 +302,14 @@ function KidRoutineMainContent() {
   const [burstAt, setBurstAt] = useState<{ x: number; y: number; emoji: string } | null>(null)
   /** 보상이 레벨 블록에 도착한 뒤, 하트/별 5개가 채워졌으면 EXP 바로 5개 날아가는 효과 트리거용 */
   const triggerFlyToExpBarRef = useRef<{ emoji: string; kind: 'heart' | 'star' } | null>(null)
-  /** 탭에서 모든 루틴을 완료했을 때 한 번만 축하 화면(폭죽·꽃다발·컨페티·효과음) 표시 */
+  /**
+   * 탭에서 모든 루틴을 완료했을 때 한 번만 축하 화면(폭죽·꽃다발·컨페티·효과음) 표시.
+   * - showCelebration: 실제로 현재 화면에 축하 팝업을 띄울지 여부
+   * - hasShownCelebrationToday: 오늘 날짜/현재 프로필 기준으로 이미 한 번 축하 팝업을 본 적이 있는지 여부
+   *   → 한 번 본 뒤에는 같은 날에는 다시 나오지 않도록 막아, 미션 카드 추가 클릭 시 계속 뜨는 현상을 방지.
+   */
   const [showCelebration, setShowCelebration] = useState(false)
+  const [hasShownCelebrationToday, setHasShownCelebrationToday] = useState(false)
   /** 1st 아이콘 버튼 클릭 시 아래에서 슬라이딩되는 팝업 표시 여부 */
   const [show1stPopup, setShow1stPopup] = useState(false)
   const [characterImageError, setCharacterImageError] = useState(false)
@@ -315,14 +321,24 @@ function KidRoutineMainContent() {
       : null
   const prevStarStickers = useRef(rewardPoints.starStickers ?? 0)
   const prevDiamonds = useRef(rewardPoints.diamonds ?? 0)
-  /** 오늘(프로필 기준) 하트/별 게이지를 몇 개까지 EXP 바로 전환했는지(누적 완료 개수 기준) */
+  /**
+   * 오늘(프로필 기준) 하트/별 게이지를 몇 개까지 EXP 바로 전환했는지(누적 완료 개수 기준).
+   * - EXP 전환(하트/별 5개 모음) 자체는 스토어의 누적 로그로 관리하지만,
+   *   "눈에 보이는 작은 하트/별 5개"는 아래 heartsGauge / starsGauge로만 제어한다.
+   * - 이렇게 분리하면, 로그 리셋/지연과 상관없이 카드 클릭 직후 게이지가 바로 반응한다.
+   */
   const [heartGaugeOffset, setHeartGaugeOffset] = useState(0)
   const [starGaugeOffset, setStarGaugeOffset] = useState(0)
   /** 클릭으로 방금 완료한 항목 키(routineId:itemId) — 스토어 리렌더 전에 카드를 바로 제거하기 위한 낙관적 업데이트 */
   const [justCompletedKeys, setJustCompletedKeys] = useState<Set<string>>(new Set())
-  /** 스토어 반영 전에 하트/별 게이지를 바로 채워 보이기 위한 낙관적 +1 (미션 완료 시 즉시 반영) */
-  const [optimisticHearts, setOptimisticHearts] = useState(0)
-  const [optimisticStars, setOptimisticStars] = useState(0)
+  /**
+   * 하트/별 게이지 "화면 표시용" 개수 (0~5).
+   * - 순수하게 "오늘 이 기기에서 아이가 몇 개를 눌러서 채웠는지"만 기준으로 한다.
+   * - 스토어의 로그(heartsCompletedRaw / starsCompletedRaw)는 EXP 전환/통계용으로만 쓰고,
+   *   게이지 애니메이션은 이 값만 보고 바로바로 반응하도록 분리한다.
+   */
+  const [heartsGauge, setHeartsGauge] = useState(0)
+  const [starsGauge, setStarsGauge] = useState(0)
   const STORAGE_KEY = 'rhymia-dashboard-last-food'
 
   // 자정 리셋: 앱 로드·탭 포커스 시 날짜가 바뀌었으면 아침/저녁 완료 상태 초기화
@@ -434,12 +450,14 @@ function KidRoutineMainContent() {
           0
         )
   /**
-   * 하트/별 게이지 표시 개수.
-   * - 스토어(heartsCompletedRaw - heartGaugeOffset) + 낙관적(optimisticHearts) 합쳐서 즉시 반영.
-   * - 5개 가득 차면 EXP 바로 전환 후 블랭크로 초기화.
+   * 레벨 블록에 실제로 표시할 하트/별 개수 (0~5).
+   * - heartsGauge / starsGauge만 사용해서 즉시 반응하도록 하고,
+   *   heartGaugeOffset / starGaugeOffset은 EXP 전환된 "묵은" 개수를 나타내는 용도로만 사용한다.
+   * - 이 페이지에서는 heartsGauge / starsGauge가 이미 0~5 범위에서 관리되므로,
+   *   단순히 그대로 사용한다.
    */
-  const heartsFilled = Math.min(5, Math.max(0, heartsCompletedRaw - heartGaugeOffset + optimisticHearts))
-  const starsFilled = Math.min(5, Math.max(0, starsCompletedRaw - starGaugeOffset + optimisticStars))
+  const heartsFilled = Math.min(5, Math.max(0, heartsGauge))
+  const starsFilled = Math.min(5, Math.max(0, starsGauge))
 
   const level = (petState.stage ?? 0) + 1
   const expProgress = profileId ? getProgress(profileId) : 0
@@ -448,32 +466,22 @@ function KidRoutineMainContent() {
   const expCurrent = Math.max(0, (petState.totalFed ?? 0) - curStageExp)
   const expNext = Math.max(1, nextStageTotal - curStageExp)
 
-  // 날짜 또는 프로필이 바뀌면, 게이지 전환·낙관적 완료 키·낙관적 하트/별 초기화
+  // 날짜 또는 프로필이 바뀌면, 게이지 전환·낙관적 완료 키·화면용 하트/별 게이지 완전 초기화
   useEffect(() => {
+    // 하트/별 게이지 관련 누적 값 및 보정값을 완전히 0에서 다시 시작
     setHeartGaugeOffset(0)
     setStarGaugeOffset(0)
     setJustCompletedKeys(new Set())
-    setOptimisticHearts(0)
-    setOptimisticStars(0)
+    setHeartsGauge(0)
+    setStarsGauge(0)
+
+    // 날짜/프로필 변경 시에는 축하 팝업 관련 상태도 함께 초기화해, 새로운 하루에는 다시 한 번 표시되도록 함
+    setShowCelebration(false)
+    setHasShownCelebrationToday(false)
   }, [todayStr, profileId])
 
-  // 스토어 완료 수가 늘어나면 낙관적 보정 해제 (새로고침 등으로 반영됐을 때). 리셋 후 첫 클릭에서도 채워지도록 ref만 비교해 클리어
-  const prevHeartsRawRef = useRef(heartsCompletedRaw)
-  const prevStarsRawRef = useRef(starsCompletedRaw)
-  useEffect(() => {
-    const prev = prevHeartsRawRef.current
-    if (heartsCompletedRaw > prev) {
-      setOptimisticHearts(0)
-      prevHeartsRawRef.current = heartsCompletedRaw
-    }
-  }, [heartsCompletedRaw])
-  useEffect(() => {
-    const prev = prevStarsRawRef.current
-    if (starsCompletedRaw > prev) {
-      setOptimisticStars(0)
-      prevStarsRawRef.current = starsCompletedRaw
-    }
-  }, [starsCompletedRaw])
+  // 스토어 완료 수 변화는 EXP 계산·통계용으로만 사용하고,
+  // 화면용 하트/별 게이지(heartsGauge / starsGauge)는 카드 클릭 시에만 직접 변경한다.
 
   // 하트/별이 5개 이상 쌓였으면, 이미 레벨 게이지로 전환된 걸로 간주하고 offset 동기화 → 게이지는 0~4개만 표시(블랭크 하트/별)
   useEffect(() => {
@@ -516,25 +524,36 @@ function KidRoutineMainContent() {
     }
   }
 
-  /** 시간대 루틴 + 특별미션(상시) 합친 플랫 항목 리스트. includeHidden true면 숨긴 항목도 포함 */
+  /**
+   * 시간대 루틴 + 특별미션(상시) 합친 플랫 항목 리스트.
+   * - includeHidden true면 숨긴 항목도 포함.
+   * - 이 함수는 "현재 탭 기준으로 어떤 미션들이 존재하는지"만 계산하고,
+   *   "완료 여부에 따른 필터링"은 아래 itemEntries 계산 단계에서 한 번에 처리한다.
+   */
   const getItemEntries = (includeHidden = false): RoutineItemEntry[] => {
+    // 1️⃣ 현재 선택된 시간대(아침/오후/저녁/주말)에 해당하는 루틴 목록만 추린다.
     const timeList =
       currentTimeTab === 'morning' ? morningRoutines
       : currentTimeTab === 'afternoon' ? afternoonRoutines
       : currentTimeTab === 'evening' ? eveningRoutines
       : currentTimeTab === 'weekend' ? weekendRoutines
       : []
+
+    // 2️⃣ 루틴 리스트를 카드에서 쓰기 좋은 납작한(entries) 구조로 변환한다.
     const toEntries = (list: typeof todayRoutines) => {
       const ent: RoutineItemEntry[] = []
       list.forEach((r) => {
         r.items
-          .filter((item) => includeHidden || !(item as RoutineItem).hidden)
+          .filter((item) => includeHidden || !(item as RoutineItem).hidden) // 숨김 처리된 항목은 옵션에 따라 제외
           .forEach((item) => {
             ent.push({ routineId: r.id, routineType: r.type, item: item as RoutineItem })
           })
       })
+      // 같은 루틴 안에서는 order 순서대로 나오도록 정렬
       return ent.sort((a, b) => a.item.order - b.item.order)
     }
+
+    // 3️⃣ 현재 시간대 루틴 + 특별미션(상시)을 합쳐 하나의 리스트로 반환
     return [...toEntries(timeList), ...toEntries(specialRoutines)]
   }
 
@@ -546,13 +565,71 @@ function KidRoutineMainContent() {
   /** 항목 고유 키 (낙관적 제거용) */
   const entryKey = (routineId: string, itemId: string) => `${routineId}:${itemId}`
 
-  /** 수정 모드: 숨긴 항목 포함 전체 표시. 보기 모드: 완료한 항목 + 방금 클릭으로 완료한 항목 제거 (낙관적 업데이트로 카드 즉시 제거) */
-  const itemEntries = editMode
-    ? getItemEntries(true)
-    : getItemEntries(false).filter(
-        (e) =>
-          !justCompletedKeys.has(entryKey(e.routineId, e.item.id)) && !isItemCompleted(e.routineId, e.item.id)
+  /**
+   * 수정 모드 / 보기 모드별로 실제로 화면에 보여줄 카드 리스트 계산.
+   *
+   * - 수정 모드(editMode=true)
+   *   · 숨긴 항목까지 모두 보여 주어야 하므로, 완료 여부와 관계없이 getItemEntries(true) 그대로 사용.
+   *
+   * - 보기 모드(editMode=false)
+   *   · 1차로 "현재 시간대 탭"에서 아직 완료하지 않은 미션만 보여 준다.
+   *   · 만약 현재 탭에서 보여 줄 미션이 하나도 없고,
+   *     오늘 다른 시간대(아침/오후/저녁/주말, 특별미션 제외)에 아직 완료하지 않은 미션이 남아 있다면
+   *     → 그 남은 미션들을 자동으로 활성화하여 보여 준다.
+   *       (사용자 입장에서는 '모두 완료했어요!' 대신, 아직 남은 미션이 자연스럽게 이어서 노출)
+   */
+  let itemEntries: RoutineItemEntry[]
+
+  if (editMode) {
+    // ✅ 수정 모드: 숨김 여부와 상관없이 모든 항목을 그대로 노출
+    itemEntries = getItemEntries(true)
+  } else {
+    // ✅ 보기 모드 1단계: 현재 시간대 탭 기준으로 아직 완료하지 않은 미션만 필터링
+    const baseEntries = getItemEntries(false)
+    const visibleInCurrentTab = baseEntries.filter(
+      (e) =>
+        !justCompletedKeys.has(entryKey(e.routineId, e.item.id)) && // 방금 완료한(낙관적) 항목은 숨김
+        !isItemCompleted(e.routineId, e.item.id) // 오늘 이미 완료한 항목은 숨김
+    )
+
+    if (visibleInCurrentTab.length > 0) {
+      // 🔹 현재 탭에 아직 남은 미션이 있다면 그대로 사용
+      itemEntries = visibleInCurrentTab
+    } else {
+      // ✅ 보기 모드 2단계: 현재 탭에서는 더 이상 보여 줄 미션이 없을 때,
+      //                   오늘 다른 시간대 탭에 남아 있는 미션들을 순서대로 모아서 보여 준다.
+      const fallbackEntries: RoutineItemEntry[] = []
+
+      // 오늘의 모든 루틴을 타입별로 그룹에서 가져오되, 현재 탭과 특별미션(special)은 제외
+      const fallbackTypes = (['morning', 'afternoon', 'evening', 'weekend'] as DashboardTab[]).filter(
+        (t) => t !== currentTimeTab
       )
+
+      fallbackTypes.forEach((type) => {
+        const list =
+          type === 'morning' ? morningRoutines
+          : type === 'afternoon' ? afternoonRoutines
+          : type === 'evening' ? eveningRoutines
+          : weekendRoutines
+
+        list.forEach((r) => {
+          r.items.forEach((rawItem) => {
+            const item = rawItem as RoutineItem
+            if (item.hidden) return // 숨김 처리된 항목은 스킵
+            const key = entryKey(r.id, item.id)
+            // 오늘 이미 완료했거나 방금 완료 처리된 항목은 제외
+            if (justCompletedKeys.has(key) || isItemCompleted(r.id, item.id)) return
+            fallbackEntries.push({ routineId: r.id, routineType: r.type, item })
+          })
+        })
+      })
+
+      // 동일 루틴 내에서는 order 기준으로 자연스럽게 정렬
+      fallbackEntries.sort((a, b) => a.item.order - b.item.order)
+
+      itemEntries = fallbackEntries
+    }
+  }
 
   /**
    * 미션 카드 클릭: 즉시 완료 처리 → 카드 위치에서 터지는 버스트 효과 → 보상 이모지가 레벨 블록으로 날아감.
@@ -567,11 +644,30 @@ function KidRoutineMainContent() {
     const isSpecial = entry.routineType === 'special'
     const rewardEmoji = isSpecial ? '⭐' : '❤️'
 
-    // 0. 낙관적 업데이트: 클릭 직후 동기 반영해 하트/별 게이지가 즉시 채워지도록 (느리게 적용되는 현상 방지)
+    // 0. 낙관적 업데이트: 클릭 직후 동기 반영해 하트/별 게이지가 즉시 채워지도록 (느리게 보이는 현상 방지)
     flushSync(() => {
       setJustCompletedKeys((prev) => new Set(prev).add(key))
-      if (isSpecial) setOptimisticStars((prev) => Math.min(prev + 1, 5))
-      else setOptimisticHearts((prev) => Math.min(prev + 1, 5))
+      if (isSpecial) {
+        // 특별 미션(별) 완료 시: 화면용 별 게이지를 즉시 +1 하고,
+        // 5개가 꽉 찼다면 EXP 바로 날아가는 연출을 예약한다.
+        setStarsGauge((prev) => {
+          const next = Math.min(5, prev + 1)
+          if (next === 5) {
+            triggerFlyToExpBarRef.current = { emoji: rewardEmoji, kind: 'star' }
+          }
+          return next
+        })
+      } else {
+        // 일반 미션(하트) 완료 시: 화면용 하트 게이지를 즉시 +1 하고,
+        // 5개가 꽉 찼다면 EXP 바로 날아가는 연출을 예약한다.
+        setHeartsGauge((prev) => {
+          const next = Math.min(5, prev + 1)
+          if (next === 5) {
+            triggerFlyToExpBarRef.current = { emoji: rewardEmoji, kind: 'heart' }
+          }
+          return next
+        })
+      }
     })
     // 1. 스토어에도 완료 저장 (새로고침 시 반영)
     completeItemForRoutine(entry.routineId, entry.item.id)
@@ -596,36 +692,16 @@ function KidRoutineMainContent() {
         to: { x: lr.left + lr.width / 2, y: lr.top + lr.height / 2 },
         emoji: rewardEmoji,
       })
-      // 3-1. 완료 직후 하트/별이 5개가 됐으면, 보상 도착 후 EXP 바로 5개 날아가는 효과 예약
-      // 최신 로그 기준으로, 현재 프로필의 미션 완료 개수를 다시 계산한다.
-      const newHeartsCompletedRaw =
-        profileId == null
-          ? 0
-          : [...morningRoutines, ...afternoonRoutines, ...eveningRoutines, ...weekendRoutines].reduce(
-              (sum, r) => sum + (getTodayLogForProfile(profileId, r.id)?.completedItems?.length ?? 0),
-              0
-            )
-      const newStarsCompletedRaw =
-        profileId == null
-          ? 0
-          : specialRoutines.reduce(
-              (sum, r) => sum + (getTodayLogForProfile(profileId, r.id)?.completedItems?.length ?? 0),
-              0
-            )
-      // 이미 EXP 바로 전환된 개수(heartGaugeOffset / starGaugeOffset)를 제외한 "눈에 보이는" 게이지 개수
-      const newHeartsVisible = Math.min(5, Math.max(0, newHeartsCompletedRaw - heartGaugeOffset))
-      const newStarsVisible = Math.min(5, Math.max(0, newStarsCompletedRaw - starGaugeOffset))
-      // 지금 클릭한 미션이 일반 미션이면 하트 게이지, 특별미션이면 별 게이지가 5개 채워졌을 때만 트리거
-      if ((isSpecial && newStarsVisible === 5) || (!isSpecial && newHeartsVisible === 5)) {
-        triggerFlyToExpBarRef.current = { emoji: rewardEmoji, kind: isSpecial ? 'star' : 'heart' }
-      }
+      // 3-1. EXP 전환 트리거는 위의 heartsGauge / starsGauge 업데이트 시점에서 이미 예약된다.
     }
 
     // 4. 오늘 노출 중인 미션을 모두 완료했는지 확인 후 축하 화면
     const allVisible = getItemEntries()
     const uncompletedCount = allVisible.filter((e) => !isItemCompleted(e.routineId, e.item.id)).length
-    if (allVisible.length > 0 && uncompletedCount === 0) {
+    //    - 단, 같은 날/같은 프로필에서 이미 한 번 축하 화면을 본 적이 있다면 다시 띄우지 않는다.
+    if (!hasShownCelebrationToday && allVisible.length > 0 && uncompletedCount === 0) {
       setShowCelebration(true)
+      setHasShownCelebrationToday(true)
     }
   }
 
@@ -740,12 +816,16 @@ function KidRoutineMainContent() {
               const kind = flyToExpBar.kind
               setFlyToExpBar(null)
               if (kind === 'heart') {
+                // 하트 5개가 EXP 바로 전환되면, 화면용 하트 게이지를 0으로 비우고
+                // 누적 전환 개수(heartGaugeOffset)를 5만큼 올린다.
                 setHeartGaugeOffset((prev) => prev + 5)
-                setOptimisticHearts(0)
+                setHeartsGauge(0)
                 if (profileId) addExp(profileId, 1) // 하트 5개 전환 시 레벨 게이지 +1
               } else if (kind === 'star') {
+                // 별 5개가 EXP 바로 전환되면, 화면용 별 게이지를 0으로 비우고
+                // 누적 전환 개수(starGaugeOffset)를 5만큼 올린다.
                 setStarGaugeOffset((prev) => prev + 5)
-                setOptimisticStars(0)
+                setStarsGauge(0)
                 if (profileId) addExp(profileId, 10) // 별 5개 전환 시 레벨 게이지 +10
               }
             }}
@@ -857,7 +937,7 @@ function KidRoutineMainContent() {
               />
             </div>
 
-            {/* 오른쪽 상단: 코인 블록 + 뱃지 블록 나란히 (같은 사이즈, 투명 글래스 효과) */}
+            {/* 오른쪽 상단: 코인 블록 + 1st 블록 (기존 스타일 유지) */}
             <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
               {/* 코인 블록 */}
               <div className="flex items-center gap-1.5 rounded-xl bg-white/60 backdrop-blur-md px-2.5 py-1.5 shadow-md border border-white/50">

@@ -51,11 +51,6 @@ export function FamilyChildCard({ profile }: Props) {
     return () => clearInterval(id)
   }, [])
 
-  const todayRoutine = routines.find((r) => r.type === 'morning')
-  const totalItems = todayRoutine?.items.length ?? 0
-  const completedItems = completedItemIds.morning.length
-  const progressRate = totalItems > 0 ? completedItems / totalItems : 0
-
   const childStatus = getChildStatus(profile)
 
   const petEmoji = getEmoji(profile.id)
@@ -118,33 +113,44 @@ export function FamilyChildCard({ profile }: Props) {
           </div>
         </div>
 
-        <div>
-          <div className="flex justify-between items-center mb-1">
-            <p className="text-xs text-gray-400">오늘 루틴</p>
-            <p className="text-xs font-black text-gray-600">{completedItems}/{totalItems}</p>
-          </div>
-          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-            <motion.div
-              className="h-full bg-gradient-to-r from-[#FF8FAB] to-[#FFD93D] rounded-full"
-              animate={{ width: `${progressRate * 100}%` }}
-              transition={{ type: 'spring', stiffness: 80 }}
-            />
-          </div>
-        </div>
-
         {childStatus && (
-          <div
-            className={`py-2 px-3 rounded-xl text-xs font-bold ${
-              childStatus.type === 'at_institution'
-                ? 'bg-[#A8E6CF]/30 text-[#2D6A4F]'
-                : childStatus.type === 'departure'
-                  ? 'bg-amber-50 text-amber-700'
-                  : 'bg-[#7EB8D4]/30 text-[#1B4965]'
-            }`}
-          >
-            {childStatus.type === 'at_institution' && <span>🏫 {childStatus.label}</span>}
-            {childStatus.type === 'departure' && <span>🚌 {childStatus.label}</span>}
-            {childStatus.type === 'bedtime' && <span>😴 {childStatus.label}</span>}
+          <div className="mt-2 flex items-center gap-2">
+            <div className="w-9 h-9 rounded-2xl bg-gray-50 flex items-center justify-center flex-shrink-0">
+              {childStatus.type === 'at_institution' && (
+                <img
+                  src="/routine-icons/icons/status/school.png"
+                  alt="유치원/학교"
+                  className="w-7 h-7 object-contain"
+                />
+              )}
+              {childStatus.type === 'departure' && (
+                <img
+                  src="/routine-icons/icons/status/bus.png"
+                  alt="등원 버스"
+                  className="w-7 h-7 object-contain"
+                />
+              )}
+              {childStatus.type === 'bedtime' && (
+                <img
+                  src="/routine-icons/icons/status/sleeping-mode.png"
+                  alt="잠자는 시간"
+                  className="w-7 h-7 object-contain"
+                />
+              )}
+              {childStatus.type === 'after_school' && (
+                <img
+                  src="/routine-icons/icons/status/school.png"
+                  alt="하원 후"
+                  className="w-7 h-7 object-contain"
+                />
+              )}
+            </div>
+            <p className="text-xs font-bold text-gray-700">
+              {childStatus.type === 'departure' && '버스가 오고있어요'}
+              {childStatus.type === 'at_institution' && childStatus.label}
+              {childStatus.type === 'bedtime' && '꿈나라 여행중'}
+              {childStatus.type === 'after_school' && '엄마와 함께하는 시간'}
+            </p>
           </div>
         )}
       </motion.button>
