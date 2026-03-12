@@ -79,11 +79,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     )
   }
 
+  // 일반 화면: 뷰포트 높이 고정 + 스크롤 방지 → 모든 화면이 한 페이지에 들어가고, 필요한 영역만 내부 스크롤
   return (
     <>
       {!isOnboarding && <TopProfileBar />}
-      <main className={isOnboarding ? '' : 'pt-14 min-h-screen min-h-[100dvh]'}>
-        {children}
+      <main
+        className={
+          isOnboarding
+            ? ''
+            : 'pt-14 h-dvh flex flex-col overflow-hidden min-h-0'
+        }
+      >
+        {!isOnboarding ? (
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            {children}
+          </div>
+        ) : (
+          children
+        )}
       </main>
     </>
   )

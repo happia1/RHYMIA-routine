@@ -71,6 +71,7 @@ const defaultRewardPoints: RewardPoints = {
   lastCompletedDate: null,
   starStickers: 0,
   diamonds: 0,
+  coins: 0,
 }
 
 function defaultProfileData(): ProfileRoutineData {
@@ -112,6 +113,8 @@ interface KidRoutineState {
   hasShownReward: (routineId: string) => boolean
   confirmRoutineComplete: () => void
   addPoints: (points: number) => void
+  /** 상점에서 간식 구매 시 코인 차감 (잔액 부족 시 false) */
+  spendCoins: (amount: number) => boolean
   getTodayLog: (routineId: string) => RoutineLog | undefined
   getTodayLogForProfile: (profileId: string, routineId: string) => RoutineLog | undefined
   getActiveRoutine: () => RoutineTemplate | undefined
@@ -398,6 +401,9 @@ export const useKidRoutineStore = create<KidRoutineState>()(
             }
           }
 
+          // 미션 1개 완료 시 코인 +1 (상점에서 간식 구매에 사용)
+          const coins = (rp.coins ?? 0) + 1
+
           const by = { ...get().byProfile }
           by[pid] = {
             ...data,
@@ -409,11 +415,28 @@ export const useKidRoutineStore = create<KidRoutineState>()(
               lastCompletedDate: isFullyCompleted ? today() : rp.lastCompletedDate,
               starStickers,
               diamonds,
+              coins,
             },
           }
           set({ byProfile: by })
-          // 미션 1개 완료 시 해당 프로필의 펫에게 먹이 1개 적립 (프로필별 분리)
-          if (pid) usePetStore.getState().addExp(pid, 1)
+          // 레벨 게이지(EXP)는 하트 5개/별 5개 전환 시에만 증가 (kid 페이지에서 처리)
+        },
+
+        /** 상점에서 간식 구매 시 코인 차감 (잔액 부족 시 false 반환) */
+        spendCoins: (amount) => {
+          const pid = get().currentProfileId
+          if (!pid || amount <= 0) return false
+          const data = get().byProfile[pid] ?? defaultProfileData()
+          const rp = data.rewardPoints
+          const current = rp.coins ?? 0
+          if (current < amount) return false
+          const by = { ...get().byProfile }
+          by[pid] = {
+            ...data,
+            rewardPoints: { ...rp, coins: current - amount },
+          }
+          set({ byProfile: by })
+          return true
         },
 
         setRoutines: (templates, forProfileId) => {

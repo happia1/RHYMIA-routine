@@ -53,14 +53,14 @@ export default function HomePage() {
         : h >= 18 && h < 22
           ? 'evening'
           : 'night'
+  // 한 화면에 맞춤: 뷰포트 높이 고정, 아래 영역만 내부 스크롤
   return (
     <div
-      className="min-h-screen min-h-[100dvh] bg-cover bg-center bg-no-repeat"
+      className="h-full min-h-0 flex flex-col overflow-hidden bg-cover bg-center bg-no-repeat"
       style={{ backgroundImage: 'url(/background/ground.png)' }}
     >
-      {/* 홈 화면 배경: ground.png, 하단 여백 없이 화면 끝까지 채움 */}
-      {/* ── 상단 헤더: 시간·날짜 / 날씨·알림 아이콘 (반투명 배경으로 배경 이미지가 비치도록) ── */}
-      <div className="px-5 pt-8 pb-4 bg-white/15 backdrop-blur-sm">
+      {/* 상단 헤더: 시간·날짜 / 날씨 (고정) */}
+      <div className="flex-shrink-0 px-5 pt-8 pb-4 bg-white/15 backdrop-blur-sm">
         <motion.div
           initial={{ opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -86,13 +86,12 @@ export default function HomePage() {
         </motion.div>
       </div>
 
-      {/* ── 오늘의 메시지 배너 ── */}
-      <div className="px-5 mb-5">
-        <DailyMessageBanner />
-      </div>
-
-      {/* ── 가족 카드 목록 ── */}
-      <div className="px-5 flex flex-col gap-3">
+      {/* 오늘의 메시지 + 가족 카드: 영역만 스크롤, 페이지 자체는 스크롤 없음 */}
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+        <div className="px-5 mb-5">
+          <DailyMessageBanner />
+        </div>
+        <div className="px-5 flex flex-col gap-3 pb-6">
         <p className="text-xs font-black text-gray-400 tracking-wider uppercase">우리 가족</p>
 
         {profiles.map((profile, i) => {
@@ -120,6 +119,7 @@ export default function HomePage() {
             <p className="text-gray-400 font-semibold">프로필을 추가해주세요</p>
           </div>
         )}
+        </div>
       </div>
     </div>
   )

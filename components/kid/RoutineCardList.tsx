@@ -185,33 +185,24 @@ function SortableRoutineCard({
   )
 }
 
-/** 수정 모드가 아닐 때: 클릭 시 scale down & fade out 후 onExitComplete 호출 */
+/**
+ * 수정 모드가 아닐 때: 클릭 시 부모에서 즉시 완료 처리되어 리스트에서 제거됨.
+ * 리스트에서 제거될 때 터지면서(살짝 커졌다가) 사라지는 exit 애니메이션 재생.
+ */
 function StaticRoutineCard({
   entry,
   onComplete,
-  isExiting,
-  onExitComplete,
 }: {
   entry: RoutineItemEntry
   onComplete: (e?: React.MouseEvent) => void
-  isExiting?: boolean
-  onExitComplete?: () => void
 }) {
   return (
     <motion.div
       layout
       initial={{ opacity: 0, scale: 0.95 }}
-      animate={
-        isExiting
-          ? { opacity: 0, scale: 0.3 }
-          : { opacity: 1, scale: 1 }
-      }
-      exit={{ opacity: 0, scale: 0.3 }}
-      transition={{ duration: 0.25, ease: 'easeIn' }}
-      onAnimationComplete={() => {
-        if (isExiting && onExitComplete) onExitComplete()
-      }}
-      className={isExiting ? 'pointer-events-none' : ''}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 1.35 }}
+      transition={{ duration: 0.22, ease: 'easeIn' }}
     >
       <RoutineCardContent
         entry={entry}
@@ -292,12 +283,8 @@ export function IconPickerModal({
 
 interface RoutineCardListProps {
   entries: RoutineItemEntry[]
-  /** 카드 클릭 시 호출 (애니메이션 시작·날아가는 효과용). 완료 처리 자체는 onExitAnimationComplete에서 */
+  /** 카드 클릭 시 호출 (부모에서 즉시 완료 처리 + 날아가는 효과) */
   onComplete: (entry: RoutineItemEntry, e?: React.MouseEvent) => void
-  /** scale down & fade out 애니메이션 종료 후 호출 — 이때 실제 완료 처리(리스트에서 제거) */
-  onExitAnimationComplete?: (entry: RoutineItemEntry) => void
-  /** 애니메이션 중인 카드의 item.id (이 카드만 scale down & fade out) */
-  completingEntryId?: string | null
   onReorder: (newOrder: RoutineItemEntry[]) => void
   onRemove: (entry: RoutineItemEntry) => void
   /** 수정 모드에서 카드 숨기기/표시하기 (설정은 저장되어 다음날에도 유지) */
@@ -309,8 +296,6 @@ interface RoutineCardListProps {
 export function RoutineCardList({
   entries,
   onComplete,
-  onExitAnimationComplete,
-  completingEntryId,
   onReorder,
   onRemove,
   onHide,
@@ -402,17 +387,13 @@ export function RoutineCardList({
             <motion.div
               key={entry.item.id}
               layout
+              exit={{ opacity: 0, scale: 0.3, transition: { duration: 0.2 } }}
               className="flex-shrink-0 w-[min(34vw,172px)] min-h-[min(46vw,230px)]"
             >
+              {/* 카드 클릭 시 완료 처리 후 리스트에서 제거될 때 exit로 사라짐 */}
               <StaticRoutineCard
                 entry={entry}
                 onComplete={(e) => onComplete(entry, e)}
-                isExiting={completingEntryId === entry.item.id}
-                onExitComplete={
-                  onExitAnimationComplete
-                    ? () => onExitAnimationComplete(entry)
-                    : undefined
-                }
               />
             </motion.div>
           )

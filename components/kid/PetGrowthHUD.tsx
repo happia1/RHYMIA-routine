@@ -1,7 +1,7 @@
 /**
  * 마이펫 성장 대시보드 전용 상단 HUD (다마고치 스타일)
- * 비개발자: 레벨을 프로그레스 바 형태로, 아이콘 우측 하단에 x0 형태 개수를 표시합니다.
- * 레벨 블록(PetLevelBlock)은 캐릭터 화면 왼쪽에 별도 배치할 수 있도록 분리되어 있습니다.
+ * 비개발자: 레벨 블록은 LV, 경험치 바, 하트 5개, 별 5개, 코인, 상점 버튼을 한 블록에 표시합니다.
+ * 미션 성공 시 하트/별이 채워지고, 코인이 쌓여 상점에서 간식을 살 수 있습니다.
  */
 
 'use client'
@@ -9,30 +9,101 @@
 import { motion } from 'framer-motion'
 import Link from 'next/link'
 
-/** 레벨·EXP 전용 블록 (캐릭터 화면 왼쪽 배치용) */
+/** 레벨 블록 내부용 아이콘 경로 (코인/상점은 캐릭터 배경 오른쪽에 별도 배치) */
+const ICONS = {
+  heart: '/routine-icons/icons/heart.png',
+  star: '/routine-icons/icons/star.png',
+  heartBlank: '/routine-icons/icons/check/heart_blank.png',
+  heartFilled: '/routine-icons/icons/check/heart_filled.png',
+  starBlank: '/routine-icons/icons/check/star_blank.png',
+  starFilled: '/routine-icons/icons/check/star_filled.png',
+} as const
+
+/** 레벨 블록용 props: 레벨, 경험치 바, 오늘 미션 성공으로 채워진 하트/별 개수(0~5). 코인·상점은 캐릭터 배경 오른쪽에 별도 배치 */
 export interface PetLevelBlockProps {
   level: number
   expProgress: number
   expCurrent: number
   expNext: number
+  /** 오늘 미션 성공으로 채워진 하트 개수 (0~5) */
+  heartsFilled?: number
+  /** 오늘 미션 성공으로 채워진 별 개수 (0~5) */
+  starsFilled?: number
+  /** EXP 바 DOM 참조 (하트/별 5개 시 날아가는 효과의 목표 위치) */
+  expBarRef?: React.RefObject<HTMLDivElement | null>
+  /** 하트 게이지(작은 하트 5개) DOM 참조 — 게이지가 가득 찼을 때 EXP 바로 날아가는 출발 위치 */
+  heartGaugeRef?: React.RefObject<HTMLDivElement | null>
+  /** 별 게이지(작은 별 5개) DOM 참조 — 게이지가 가득 찼을 때 EXP 바로 날아가는 출발 위치 */
+  starGaugeRef?: React.RefObject<HTMLDivElement | null>
 }
 
-export function PetLevelBlock({ level, expProgress, expCurrent, expNext }: PetLevelBlockProps) {
+export function PetLevelBlock({
+  level,
+  expProgress,
+  expCurrent,
+  expNext,
+  heartsFilled = 0,
+  starsFilled = 0,
+  expBarRef,
+  heartGaugeRef,
+  starGaugeRef,
+}: PetLevelBlockProps) {
   return (
-    <div className="flex-shrink-0 min-w-[90px] flex flex-col justify-center rounded-xl bg-white/75 backdrop-blur-sm px-2.5 py-2 shadow-md border border-amber-100/80">
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-amber-600 text-sm font-black">LV.{level}</span>
-        <span className="text-[10px] text-amber-700/90 font-bold">
-          EXP {expCurrent}/{expNext}
+    <div className="flex-shrink-0 min-w-[120px] w-[140px] flex flex-col justify-center gap-1.5 rounded-2xl bg-white/60 backdrop-blur-md px-2.5 py-3 shadow-lg border border-white/50">
+      {/* 투명 글래스 효과: 배경 반투명 + 블러 */}
+      {/* LV 레벨 + EXP 바 (하트/별 5개 시 날아오는 목표) */}
+      <div className="flex items-center justify-between mb-0.5">
+        <span className="text-amber-600 text-base font-black">LV.{level}</span>
+        <span className="text-[10px] text-amber-700/90 font-bold truncate">
+          {expCurrent}/{expNext}
         </span>
       </div>
-      <div className="h-2.5 bg-amber-100 rounded-full overflow-hidden border border-amber-200/50">
+      <div
+        ref={expBarRef}
+        className="h-3 bg-amber-100 rounded-full overflow-hidden border border-amber-200/50"
+      >
         <motion.div
           className="h-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-full"
           initial={false}
           animate={{ width: `${Math.min(100, expProgress * 100)}%` }}
           transition={{ duration: 0.4, ease: 'easeOut' }}
         />
+      </div>
+
+      {/* 첫 번째 블록: mission complete 타이틀 + 하트 이미지 + 작은 하트 5개 */}
+      <div className="flex flex-col gap-0.5">
+        <span className="text-[9px] font-bold text-amber-700/80 uppercase tracking-wide">mission complete</span>
+        <div className="flex items-center gap-1">
+          <img src={ICONS.heart} alt="" className="w-5 h-5 object-contain flex-shrink-0" />
+          <div ref={heartGaugeRef} className="flex items-center gap-0.5">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <img
+                key={i}
+                src={i < heartsFilled ? ICONS.heartFilled : ICONS.heartBlank}
+                alt=""
+                className="w-4 h-4 object-contain"
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 두 번째 블록: special mission 타이틀 + 별 이미지 + 작은 별 5개 */}
+      <div className="flex flex-col gap-0.5">
+        <span className="text-[9px] font-bold text-amber-700/80 uppercase tracking-wide">special mission</span>
+        <div className="flex items-center gap-1">
+          <img src={ICONS.star} alt="" className="w-5 h-5 object-contain flex-shrink-0" />
+          <div ref={starGaugeRef} className="flex items-center gap-0.5">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <img
+                key={i}
+                src={i < starsFilled ? ICONS.starFilled : ICONS.starBlank}
+                alt=""
+                className="w-4 h-4 object-contain"
+              />
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   )

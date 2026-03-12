@@ -62,10 +62,10 @@ export function ProfileSwitchSheet({ isOpen, onClose }: ProfileSwitchSheetProps)
     }
   }
 
-  /** 프로필 추가: 시트 닫고 처음 온보딩 화면으로 이동 */
+  /** 프로필 추가: 시트 닫고 온보딩 첫 화면(우리아이/나의 루틴 선택)으로 이동 */
   const handleAddProfile = () => {
     onClose()
-    router.push('/onboarding')
+    router.replace('/onboarding')
   }
 
   /** 자녀 프로필 설정: 이름·시간 등 전체 수정 페이지로 이동 (자녀만 해당) */

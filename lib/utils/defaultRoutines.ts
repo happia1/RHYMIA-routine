@@ -212,14 +212,13 @@ export const DEFAULT_KID_MORNING: RoutineTemplate = {
   schedule: { days: [1, 2, 3, 4, 5], time: '07:00' },
   items: [
     makeItem('km-1', 'wake-up', '🌅', '일어나기', 1),
-    makeItem('km-2', 'wash-face', '🫧', '세수하기', 2),
-    makeItem('km-3', 'brush-teeth', '🪥', '양치하기', 3),
-    makeItem('km-4', 'potty', '🚽', '화장실가기', 4),
-    makeItem('km-5', 'self-dress', '👗', '원복 갈아입기', 5),
-    makeItem('km-6', 'pack-bag', '🎒', '가방준비', 6),
-    makeItem('km-7', 'breakfast', '🍳', '아침 먹기', 7),
-    makeItem('km-8', 'self-tie-shoes', '👟', '신발 신기', 8),
-    makeItem('km-9', 'go-to-kindergarden', '🏫', '등원하기', 9),
+    makeItem('km-2', 'brush-teeth', '🪥', '양치하기', 2),
+    makeItem('km-3', 'potty', '🚽', '화장실가기', 3),
+    makeItem('km-4', 'self-dress', '👗', '원복 갈아입기', 4),
+    makeItem('km-5', 'pack-bag', '🎒', '가방준비', 5),
+    makeItem('km-6', 'breakfast', '🍳', '아침 먹기', 6),
+    makeItem('km-7', 'self-tie-shoes', '👟', '신발 신기', 7),
+    makeItem('km-8', 'go-to-kindergarden', '🏫', '등원하기', 8),
   ],
 }
 
@@ -326,11 +325,10 @@ export const DEFAULT_SCHOOL_KID_MORNING: RoutineTemplate = {
   schedule: { days: [1, 2, 3, 4, 5], time: '07:00' },
   items: [
     makeItem('sk-1', 'wake-up',     '🌅', '일어나기',    1),
-    makeItem('sk-2', 'wash-face',   '🫧', '세수하기',    2),
-    makeItem('sk-3', 'brush-teeth', '🪥', '양치하기',    3),
-    makeItem('sk-4', 'get-dressed', '👗', '옷 입기',     4),
-    makeItem('sk-5', 'breakfast',   '🍳', '아침 먹기',   5),
-    makeItem('sk-6', 'unpack-bag',  '🎒', '가방 챙기기', 6),
+    makeItem('sk-2', 'brush-teeth', '🪥', '양치하기',    2),
+    makeItem('sk-3', 'get-dressed', '👗', '옷 입기',     3),
+    makeItem('sk-4', 'breakfast',   '🍳', '아침 먹기',   4),
+    makeItem('sk-5', 'unpack-bag',  '🎒', '가방 챙기기', 5),
   ],
 }
 

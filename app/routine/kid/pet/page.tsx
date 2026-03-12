@@ -75,9 +75,10 @@ export default function KidPetPage() {
     setStageImageError(false)
   }, [stageImageSrc])
 
+  // 한 화면에 맞춤: 뷰포트 높이 고정, 본문만 내부 스크롤
   return (
-    <div className="min-h-screen bg-[#FFF9F0] pb-24">
-      <div className="px-5 pt-6 pb-4">
+    <div className="h-full min-h-0 flex flex-col overflow-hidden bg-[#FFF9F0]">
+      <div className="flex-shrink-0 px-5 pt-6 pb-2">
         <div className="flex items-center gap-3 mb-4">
           <button
             onClick={() => router.back()}
@@ -87,7 +88,8 @@ export default function KidPetPage() {
           </button>
           <h1 className="text-2xl font-black text-gray-700">나의 펫</h1>
         </div>
-
+      </div>
+      <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-24">
         {!species ? (
           <div className="bg-white rounded-2xl p-6 shadow-sm">
             <p className="text-sm text-gray-500 mb-4">

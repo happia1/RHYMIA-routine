@@ -176,21 +176,24 @@ export default function KidAlarmSettingsPage() {
     updateChildSettings({ wakeTime: next })
   }
 
+  // 한 화면에 맞춤: 뷰포트 높이 고정, 본문만 내부 스크롤
   return (
-    <div className="min-h-screen bg-[#FFF9F0] px-5 py-8">
-      <div className="flex items-center gap-4 mb-6">
-        <button
-          onClick={() => router.replace('/routine/kid')}
-          className="w-12 h-12 rounded-full bg-white shadow flex items-center justify-center"
-        >
-          <ArrowLeft className="w-6 h-6 text-gray-600" />
-        </button>
-        <div>
-          <h1 className="text-2xl font-black text-gray-700">시간 설정</h1>
-          <p className="text-gray-400 text-sm">기상·등하원·취침 시간을 정해요</p>
+    <div className="h-full min-h-0 flex flex-col overflow-hidden bg-[#FFF9F0]">
+      <div className="flex-shrink-0 px-5 py-6">
+        <div className="flex items-center gap-4 mb-4">
+          <button
+            onClick={() => router.replace('/routine/kid')}
+            className="w-12 h-12 rounded-full bg-white shadow flex items-center justify-center"
+          >
+            <ArrowLeft className="w-6 h-6 text-gray-600" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-black text-gray-700">시간 설정</h1>
+            <p className="text-gray-400 text-sm">기상·등하원·취침 시간을 정해요</p>
+          </div>
         </div>
       </div>
-
+      <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-8">
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -243,6 +246,7 @@ export default function KidAlarmSettingsPage() {
       <p className="text-gray-400 text-sm mt-6 text-center">
         상단 배너에서 다음 시간까지 남은 시간을 볼 수 있어요.
       </p>
+      </div>
     </div>
   )
 }
