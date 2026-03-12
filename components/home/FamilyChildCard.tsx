@@ -12,7 +12,7 @@ import { motion } from 'framer-motion'
 import { ChevronRight } from 'lucide-react'
 import { FamilyProfile, ROLE_META, getProfileImageSrc } from '@/types/profile'
 import { useKidRoutineStore, useKidRoutineForProfile } from '@/lib/stores/kidRoutineStore'
-import { usePetStore, PET_META } from '@/lib/stores/petStore'
+import { usePetStore, PET_META, DEFAULT_PET_STATE } from '@/lib/stores/petStore'
 import { useProfileStore } from '@/lib/stores/profileStore'
 import { getChildStatus } from '@/lib/utils/childStatus'
 
@@ -28,14 +28,24 @@ export function FamilyChildCard({ profile }: Props) {
   const setActiveProfile = useProfileStore((s) => s.setActiveProfile)
   const setCurrentProfileId = useKidRoutineStore((s) => s.setCurrentProfileId)
   const { routines, completedItemIds } = useKidRoutineForProfile(profile.id)
-  // 프로필별로 펫 상태를 가져옴 (아린/정원이 각각 다른 펫·먹이)
-  const getStateForProfile = usePetStore((s) => s.getStateForProfile)
+  // 프로필별 펫 상태 구독 — 온보딩에서 선택한 캐릭터가 petStore에 반영되면 즉시 반영돼 홈 카드에 표시됨
+  const petState = usePetStore((s) => s.byProfile[profile.id] ?? DEFAULT_PET_STATE)
+  const { species, stage, totalFed, pendingFood } = petState
   const getEmoji = usePetStore((s) => s.getEmoji)
   const getNextStageExp = usePetStore((s) => s.getNextStageExp)
-  const petState = getStateForProfile(profile.id)
-  const { species, stage, totalFed, pendingFood } = petState
+  /** PET_META에 있는 종만 사용 (저장된 species가 옛 데이터면 undefined 방지) */
+  const petMeta = species != null ? PET_META[species as keyof typeof PET_META] : undefined
+  /** 단계별 이미지 경로 (petMeta 있을 때만 사용) */
+  const stageImageSrc =
+    petMeta != null && stage != null
+      ? petMeta.stageImages[Math.min(stage, petMeta.stageImages.length - 1)]
+      : null
 
   const [tick, setTick] = useState(0)
+  const [stageImageError, setStageImageError] = useState(false)
+  useEffect(() => {
+    setStageImageError(false)
+  }, [stageImageSrc])
   useEffect(() => {
     const id = setInterval(() => setTick((n) => n + 1), 60000)
     return () => clearInterval(id)
@@ -49,7 +59,7 @@ export function FamilyChildCard({ profile }: Props) {
   const childStatus = getChildStatus(profile)
 
   const petEmoji = getEmoji(profile.id)
-  const petName = species ? PET_META[species].label : null
+  const petName = petMeta?.label ?? null
   const stageLabel = STAGE_LABELS[stage]
   const nextExp = getNextStageExp(profile.id)
   const petProgress = nextExp > 0 ? Math.min(1, totalFed / nextExp) : 0
@@ -149,18 +159,21 @@ export function FamilyChildCard({ profile }: Props) {
         {species ? (
           <>
             <motion.div
-              className="text-4xl mb-1"
+              className="w-28 h-28 flex items-center justify-center"
               animate={{ y: [0, -2, 0] }}
               transition={{ repeat: Infinity, duration: 2.5, ease: 'easeInOut' }}
             >
-              {petEmoji}
+              {stageImageSrc && !stageImageError ? (
+                <img
+                  src={stageImageSrc}
+                  alt={petName ?? ''}
+                  className="w-full h-full object-contain"
+                  onError={() => setStageImageError(true)}
+                />
+              ) : (
+                <span className="text-6xl">{petEmoji}</span>
+              )}
             </motion.div>
-            <p className="text-xs font-black text-gray-700 text-center leading-tight">
-              {petName} · {stageLabel} 단계
-            </p>
-            <p className="text-[10px] text-gray-500 mt-0.5 text-center">
-              다음 단계까지 <span className="font-black text-gray-600">{remainingToNext}</span>개
-            </p>
             {pendingFood > 0 && (
               <p className="text-[10px] text-[#FF8FAB] font-semibold mt-0.5">🍖×{pendingFood}</p>
             )}

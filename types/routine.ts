@@ -4,8 +4,8 @@
 /** 루틴 모드: 아이용 / 부모용 / 개인용 */
 export type RoutineMode = 'kid' | 'parent' | 'personal'
 
-/** 루틴 종류: 아침 / 저녁 / 주말 / 특별 */
-export type RoutineType = 'morning' | 'evening' | 'weekend' | 'special'
+/** 루틴 종류: 아침 / 평일오후 / 저녁 / 주말 / 특별 */
+export type RoutineType = 'morning' | 'afternoon' | 'evening' | 'weekend' | 'special'
 
 /** 반려동물 종류 */
 export type PetSpecies = 'dog' | 'cat' | 'rabbit' | 'hamster'
@@ -87,12 +87,19 @@ export interface RoutineLog {
   createdAt: string
 }
 
-/** 보상 포인트 정보 (총 포인트, 연속 일수 등) */
+/**
+ * 보상 포인트 정보 (총 포인트, 연속 일수, 별 스티커, 다이아몬드)
+ * 비개발자: 별 스티커 5개 모으면 자동으로 다이아몬드 1개로 바뀝니다.
+ */
 export interface RewardPoints {
   userId: string
   totalPoints: number
   streakDays: number
   lastCompletedDate: string | null
+  /** 별 스티커 개수 (마일스톤 달성 시 +1) */
+  starStickers?: number
+  /** 다이아몬드 개수 (스티커 5개 수집 시 5개 소모 후 +1) */
+  diamonds?: number
 }
 
 /** 가상 동반자 (펫 또는 식물) */

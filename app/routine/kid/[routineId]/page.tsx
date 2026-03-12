@@ -17,6 +17,8 @@ import { useProfileStore } from '@/lib/stores/profileStore'
 import { RoutineItem } from '@/types/routine'
 import { useTTS } from '@/lib/hooks/useTTS'
 import { TTS_SCRIPTS } from '@/lib/hooks/useTTSMessages'
+import { RewardHUD } from '@/components/kid/RewardHUD'
+import { DepartureBanner } from '@/components/kid/DepartureBanner'
 import { MissionCompletePopup } from '@/components/kid/MissionCompletePopup'
 import { MissionTimer } from '@/components/kid/MissionTimer'
 import { RoutineItemIcon } from '@/components/kid/RoutineItemIcon'
@@ -144,12 +146,18 @@ export default function KidRoutineExecutePage() {
   const getActiveRoutine = useKidRoutineStore((s) => s.getActiveRoutine)
   const getTodayLog = useKidRoutineStore((s) => s.getTodayLog)
   const rewardPoints = useKidRoutineStore(selectRewardPoints)
+  const byProfile = useKidRoutineStore((s) => s.byProfile)
   const sessionCompletedItems = useKidRoutineStore((s) => s.sessionCompletedItems)
   const pendingConfirmItems = useKidRoutineStore((s) => s.pendingConfirmItems)
   const resetSession = useKidRoutineStore((s) => s.resetSession)
   const markRewardShown = useKidRoutineStore((s) => s.markRewardShown)
   const hasShownReward = useKidRoutineStore((s) => s.hasShownReward)
   const routines = useKidRoutineStore(selectRoutines)
+
+  // 상단 HUD용: 현재 프로필의 별 개수(완료한 루틴 날짜 수)
+  const profileId = activeProfile?.id ?? null
+  const profileData = profileId ? byProfile[profileId] : null
+  const starCount = profileData?.logs.filter((l) => l.isFullyCompleted).length ?? 0
 
   const [ttsEnabled, setTtsEnabled] = useState(false)
   const { speak, cancel } = useTTS({ enabled: ttsEnabled, preset: 'kid' })
@@ -274,9 +282,14 @@ export default function KidRoutineExecutePage() {
 
   return (
     <div className="min-h-screen bg-[#FFF9F0] pb-10">
-
-      <div className="sticky top-0 z-10 bg-[#FFF9F0]/95 backdrop-blur-sm px-5 pt-safe pb-3">
-        <div className="flex items-center justify-between py-4">
+      {/* 상단 영역: HUD 바 + 루틴 제목/진행률 (스크롤 시 함께 상단 고정) */}
+      <div className="sticky top-0 z-10 bg-[#FFF9F0]/95 backdrop-blur-sm px-4 pt-safe pb-3 space-y-2">
+        <RewardHUD
+          stars={starCount}
+          points={rewardPoints.totalPoints}
+          streakDays={rewardPoints.streakDays}
+        />
+        <div className="flex items-center justify-between py-2 px-1">
           <button
             onClick={() => {
               resetSession()
@@ -309,7 +322,6 @@ export default function KidRoutineExecutePage() {
             }
           </button>
         </div>
-
         <div className="w-full h-3 bg-pink-100 rounded-full overflow-hidden">
           <motion.div
             className="h-full bg-gradient-to-r from-[#FF8FAB] to-[#FFD93D] rounded-full"
@@ -368,6 +380,11 @@ export default function KidRoutineExecutePage() {
             <p className="text-gray-400 mt-2">조금만 기다려요 🙏</p>
           </motion.div>
         )}
+      </div>
+
+      {/* 아침 루틴 하단: 집 나서는 시간까지 남은 시간 (등원/하원·출발 시간) */}
+      <div className="px-4 pt-4 pb-8">
+        <DepartureBanner />
       </div>
 
       <MissionCompletePopup

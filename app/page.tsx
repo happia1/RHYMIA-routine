@@ -54,9 +54,13 @@ export default function HomePage() {
           ? 'evening'
           : 'night'
   return (
-    <div className="min-h-screen bg-[#FAFAFA] pb-28">
-      {/* ── 상단 헤더: 시간·날짜 / 날씨·알림 아이콘 ── */}
-      <div className="px-5 pt-8 pb-4">
+    <div
+      className="min-h-screen min-h-[100dvh] bg-cover bg-center bg-no-repeat"
+      style={{ backgroundImage: 'url(/background/ground.png)' }}
+    >
+      {/* 홈 화면 배경: ground.png, 하단 여백 없이 화면 끝까지 채움 */}
+      {/* ── 상단 헤더: 시간·날짜 / 날씨·알림 아이콘 (반투명 배경으로 배경 이미지가 비치도록) ── */}
+      <div className="px-5 pt-8 pb-4 bg-white/15 backdrop-blur-sm">
         <motion.div
           initial={{ opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -71,12 +75,12 @@ export default function HomePage() {
             <p className="text-gray-400 text-sm leading-tight mt-0.5">{dateStr}</p>
           </div>
 
-          {/* 오른쪽 상단: 날씨 블록만 표시 */}
-          <div className="flex items-center gap-1.5 bg-white rounded-2xl px-3 py-2 shadow-sm border border-gray-100 h-[72px] min-h-[72px] box-border">
-            <span className="text-[2.5rem]">{weather?.emoji ?? '🌤'}</span>
-            <div>
-              <p className="text-xs font-black text-gray-700">{weather?.temp ?? '--'}°</p>
-              <p className="text-[10px] text-gray-400">{weather?.desc ?? '날씨'}</p>
+          {/* 오른쪽 상단: 날씨 — 아이콘 위, 텍스트 아래 세로 배치, 크기 확대 */}
+          <div className="flex flex-col items-center justify-center gap-1 px-3 py-2 min-h-[72px] box-border">
+            <span className="text-4xl leading-none">{weather?.emoji ?? '🌤'}</span>
+            <div className="flex flex-col items-center text-center">
+              <p className="text-sm font-black text-gray-700 leading-tight">{weather?.temp ?? '--'}°</p>
+              <p className="text-xs text-gray-400 leading-tight">{weather?.desc ?? '날씨'}</p>
             </div>
           </div>
         </motion.div>

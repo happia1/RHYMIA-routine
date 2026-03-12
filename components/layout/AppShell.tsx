@@ -2,6 +2,20 @@
  * 앱 전역 쉘: 프로필 없을 때 온보딩 리다이렉트 + 하단 탭바 표시 여부
  * 비개발자: 프로필이 하나도 없으면 /onboarding으로 보내고, 온보딩 중에는 탭바를 숨겨요.
  * 프로필은 localStorage에 저장되므로, 저장소 복원(rehydration)이 끝난 뒤에만 판단해요.
+ *
+ * [버그 수정 2024]
+ * - 앱 재진입 시 매번 온보딩으로 가던 문제 해결
+ * - 원인: activeProfileId가 null인 채로 /routine → / 리다이렉트 → 온보딩 무한루프
+ * - 해결: hydration 후 ensureActiveProfile() 호출로 activeProfileId 자동복구
+ *
+ * [진입 흐름]
+ * 앱 열기
+ *   → localStorage 복원 (hydration)
+ *   → profiles 있음? → ensureActiveProfile() → activeProfileId 복구
+ *     → 현재 경로가 /onboarding이면? → 홈(/)으로 이동 (이미 프로필 있으므로)
+ *     → 현재 경로가 일반 페이지면? → 그대로 유지 ✅
+ *   → profiles 없음?
+ *     → /onboarding으로 이동
  */
 
 'use client'
@@ -9,7 +23,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useProfileStore } from '@/lib/stores/profileStore'
-import { BottomTabBar } from '@/components/layout/BottomTabBar'
+import { TopProfileBar } from '@/components/layout/TopProfileBar'
 
 const ONBOARDING_PATHS = ['/onboarding']
 
@@ -17,15 +31,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const profiles = useProfileStore((s) => s.profiles)
-  // 프로필 스토어가 localStorage에서 복원되었는지 여부 (복원 전에는 profiles가 빈 배열로 보임)
+  const ensureActiveProfile = useProfileStore((s) => s.ensureActiveProfile)
   const [hasHydrated, setHasHydrated] = useState(false)
 
   const isOnboarding = ONBOARDING_PATHS.some((p) => pathname.startsWith(p))
 
-  // 1) 스토어 복원이 끝나면 hasHydrated를 true로 설정 (한 번만 체크)
+  // 1) localStorage 복원(hydration) 완료 감지
   useEffect(() => {
     if (hasHydrated) return
-    // 이미 복원된 경우(예: 빠른 재방문) 즉시 true
     if (useProfileStore.persist.hasHydrated()) {
       setHasHydrated(true)
       return
@@ -36,20 +49,42 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return unsub
   }, [hasHydrated])
 
-  // 2) 복원이 끝난 뒤에만, 프로필이 없고 온보딩 화면이 아니면 온보딩으로 보냄
+  // 2) 복원 완료 후 라우팅 결정
   useEffect(() => {
     if (!hasHydrated) return
-    if (profiles.length === 0 && !isOnboarding) {
-      router.replace('/onboarding')
+
+    if (profiles.length === 0) {
+      // 프로필이 없으면 온보딩으로
+      if (!isOnboarding) {
+        router.replace('/onboarding')
+      }
+      return
     }
-  }, [hasHydrated, profiles.length, isOnboarding, router])
+
+    // 프로필이 있으면 activeProfileId 자동복구
+    ensureActiveProfile()
+
+    // 프로필이 있는데 온보딩 화면에 있으면 홈으로
+    if (isOnboarding) {
+      router.replace('/')
+    }
+  }, [hasHydrated, profiles.length, isOnboarding, router, ensureActiveProfile])
+
+  // hydration 전: 빈 화면 (레이아웃 깜빡임 방지)
+  if (!hasHydrated) {
+    return (
+      <div className="min-h-screen bg-[#FFF9F0] flex items-center justify-center">
+        <div className="text-4xl animate-pulse">🌟</div>
+      </div>
+    )
+  }
 
   return (
     <>
-      <main className={isOnboarding ? '' : 'pb-24'}>
+      {!isOnboarding && <TopProfileBar />}
+      <main className={isOnboarding ? '' : 'pt-14 min-h-screen min-h-[100dvh]'}>
         {children}
       </main>
-      {!isOnboarding && <BottomTabBar />}
     </>
   )
 }

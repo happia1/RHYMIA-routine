@@ -12,8 +12,8 @@ import { usePetStore } from '@/lib/stores/petStore'
 import { useProfileStore } from '@/lib/stores/profileStore'
 import { useNotificationStore } from '@/lib/stores/notificationStore'
 
-/** 탭 키 (프로필 기반 페이지에서 아침/저녁/주말 구분용) */
-export type RoutineTabType = 'morning' | 'evening' | 'weekend'
+/** 탭 키 (아침/평일오후/저녁/특별미션/주말 구분용) */
+export type RoutineTabType = 'morning' | 'afternoon' | 'evening' | 'special' | 'weekend'
 
 /** 확인 대기 중인 항목 (루틴별·항목별) — 접속해도 유지되도록 프로필에 저장 */
 export interface PendingConfirmEntry {
@@ -31,6 +31,8 @@ export interface ProfileRoutineData {
   wakeAlarmTime: string
   alarmEnabled: boolean
   lastAlarmDismissedDate: string | null
+  /** 자정 리셋 시 사용: 마지막으로 리셋한 날짜 (YYYY-MM-DD) */
+  lastResetDate?: string | null
   /** 루틴별로 삭제된 항목 템플릿 (항목 추가 시 다시 넣을 수 있도록) routineId -> RoutineItem[] */
   deletedItemTemplates?: Record<string, RoutineItem[]>
 }
@@ -38,7 +40,9 @@ export interface ProfileRoutineData {
 /** 프로필별 훅이 반환하는 완료 현황 */
 export interface CompletedItemIdsByTab {
   morning: string[]
+  afternoon: string[]
   evening: string[]
+  special: string[]
   weekend: string[]
 }
 
@@ -65,6 +69,8 @@ const defaultRewardPoints: RewardPoints = {
   totalPoints: 0,
   streakDays: 0,
   lastCompletedDate: null,
+  starStickers: 0,
+  diamonds: 0,
 }
 
 function defaultProfileData(): ProfileRoutineData {
@@ -77,6 +83,7 @@ function defaultProfileData(): ProfileRoutineData {
     wakeAlarmTime: '07:00',
     alarmEnabled: true,
     lastAlarmDismissedDate: null,
+    lastResetDate: null,
     deletedItemTemplates: {},
   }
 }
@@ -113,6 +120,8 @@ interface KidRoutineState {
   getPendingConfirmItemsForProfile: (profileId: string) => string[]
   applyTimerSettings: (timers: Record<string, number>) => void
   checkAndReset: () => void
+  /** 자정 리셋: 날짜가 바뀌었을 때 아침/저녁 루틴 완료 상태 초기화 */
+  runDailyResetIfNeeded: () => void
   setWakeAlarmTime: (time: string) => void
   /** 지정한 프로필의 기상 알람 시간만 변경 (자녀 프로필 수정 시 사용) */
   setWakeAlarmTimeForProfile: (profileId: string, time: string) => void
@@ -124,6 +133,16 @@ interface KidRoutineState {
   getDeletedItemTemplates: (profileId: string, routineId: string) => RoutineItem[]
   /** 항목 추가로 다시 넣었을 때 삭제 풀에서 하나 제거 (같은 라벨) */
   removeDeletedItemTemplate: (profileId: string, routineId: string, label: string) => void
+  /** 루틴 항목 순서 변경 (드래그 앤 드롭 후 저장) */
+  reorderRoutineItems: (routineId: string, fromIndex: number, toIndex: number) => void
+  /** 루틴 항목 삭제 (삭제 풀에 넣고 리스트에서 제거) */
+  removeRoutineItem: (routineId: string, itemId: string) => void
+  /** 루틴에 항목 추가 (삭제 풀 또는 템플릿에서 선택) */
+  addRoutineItem: (routineId: string, item: RoutineItem) => void
+  /** 루틴 항목 순서를 ID 배열 순서로 일괄 반영 (드래그 앤 드롭 후) */
+  setRoutineItemsOrder: (routineId: string, orderedItemIds: string[]) => void
+  /** 루틴 항목 숨기기/표시하기 (설정은 프로필에 저장되어 다음날에도 유지) */
+  setItemHidden: (routineId: string, itemId: string, hidden: boolean) => void
 }
 
 const today = () => new Date().toISOString().split('T')[0]
@@ -131,7 +150,10 @@ const today = () => new Date().toISOString().split('T')[0]
 function patchItemImage(item: RoutineItem): RoutineItem {
   const trimLabel = item.label?.trim() ?? ''
   const keyFromLabel = trimLabel ? LABEL_TO_IMAGE_KEY[trimLabel] : undefined
-  const imageKey = keyFromLabel ?? item.imageKey
+  const imageKey =
+    item.imageKey && ROUTINE_IMAGES[item.imageKey]
+      ? item.imageKey
+      : (keyFromLabel ?? item.imageKey)
   const imagePath = imageKey ? (ROUTINE_IMAGES[imageKey] ?? null) : (item.imagePath ?? null)
   return { ...item, imageKey, imagePath }
 }
@@ -220,6 +242,8 @@ export const useKidRoutineStore = create<KidRoutineState>()(
         },
 
         initRoutines: (role) => {
+          // 자정이 지나 새 날이면 아침/저녁 루틴 완료 상태 초기화
+          get().runDailyResetIfNeeded()
           const pid = get().currentProfileId
           if (!pid) return
           const by = { ...get().byProfile }
@@ -228,8 +252,24 @@ export const useKidRoutineStore = create<KidRoutineState>()(
           const isOldSchoolDefaults =
             nextRoutines.length > 0 &&
             nextRoutines.some((r) => r.id === 'default-school-morning' || r.id === 'default-school-evening')
-          // 미취학·학령기 동일한 루틴 보드(카드) 사용. 학령기 전용 수정은 이후 요청 반영.
-          if (nextRoutines.length === 0 || (role === 'child_school' && isOldSchoolDefaults)) {
+          const morningRoutine = nextRoutines.find((r) => r.id === 'default-kid-morning')
+          const isOldMorningShape =
+            morningRoutine &&
+            (morningRoutine.items.length < 9 ||
+              morningRoutine.items.some((i) => i.label === '등교/등원 준비 완료' || i.imageKey === 'kindergarden_school') ||
+              !morningRoutine.items.some((i) => i.label === '등원하기' && i.imageKey === 'go-to-kindergarden'))
+          const eveningRoutine = nextRoutines.find((r) => r.id === 'default-kid-evening')
+          const expectedEveningKeys = ['bath-time', 'brush-teeth-night', 'shower', 'change-pajama', 'read-book-before-bed', 'good-night']
+          const isOldEveningShape =
+            eveningRoutine &&
+            (eveningRoutine.items.length !== 6 ||
+              !expectedEveningKeys.every((key, idx) => eveningRoutine.items[idx]?.imageKey === key))
+          const shouldResetToNewList =
+            nextRoutines.length === 0 ||
+            (role === 'child_school' && isOldSchoolDefaults) ||
+            isOldMorningShape ||
+            isOldEveningShape
+          if (shouldResetToNewList) {
             nextRoutines = ALL_DEFAULT_KID_ROUTINES
           } else {
             nextRoutines = nextRoutines.map((r) => ({
@@ -306,7 +346,7 @@ export const useKidRoutineStore = create<KidRoutineState>()(
             sessionCompletedItems: newCompleted,
           })
           // 미션 1개 완료 시 해당 프로필의 펫에게 먹이 1개 적립 (프로필별 분리)
-          if (currentProfileId) usePetStore.getState().addFood(currentProfileId, 1)
+          if (currentProfileId) usePetStore.getState().addExp(currentProfileId, 1)
         },
 
         completeItemForRoutine: (routineId, itemId) => {
@@ -346,6 +386,18 @@ export const useKidRoutineStore = create<KidRoutineState>()(
           const isStreak = rp.lastCompletedDate === yesterdayStr || rp.lastCompletedDate === today()
           const newStreak = isFullyCompleted ? (isStreak ? rp.streakDays + 1 : 1) : rp.streakDays
 
+          // 마일스톤(특별) 루틴 완료 시 별 스티커 +1, 5개 모이면 다이아몬드 +1로 전환
+          let starStickers = rp.starStickers ?? 0
+          let diamonds = rp.diamonds ?? 0
+          // routine은 위(345줄)에서 이미 선언됨 — 같은 루틴 객체 재사용
+          if (routine?.type === 'special') {
+            starStickers += 1
+            while (starStickers >= 5) {
+              starStickers -= 5
+              diamonds += 1
+            }
+          }
+
           const by = { ...get().byProfile }
           by[pid] = {
             ...data,
@@ -355,11 +407,13 @@ export const useKidRoutineStore = create<KidRoutineState>()(
               totalPoints: rp.totalPoints + earnedNow,
               streakDays: newStreak,
               lastCompletedDate: isFullyCompleted ? today() : rp.lastCompletedDate,
+              starStickers,
+              diamonds,
             },
           }
           set({ byProfile: by })
           // 미션 1개 완료 시 해당 프로필의 펫에게 먹이 1개 적립 (프로필별 분리)
-          if (pid) usePetStore.getState().addFood(pid, 1)
+          if (pid) usePetStore.getState().addExp(pid, 1)
         },
 
         setRoutines: (templates, forProfileId) => {
@@ -368,6 +422,100 @@ export const useKidRoutineStore = create<KidRoutineState>()(
           const by = { ...get().byProfile }
           const current = by[pid] ?? defaultProfileData()
           by[pid] = { ...current, routines: templates }
+          set({ byProfile: by })
+        },
+
+        reorderRoutineItems: (routineId, fromIndex, toIndex) => {
+          const pid = get().currentProfileId
+          if (!pid) return
+          const by = { ...get().byProfile }
+          const current = by[pid] ?? defaultProfileData()
+          const routine = current.routines.find((r) => r.id === routineId)
+          if (!routine || fromIndex === toIndex) return
+          const items = [...routine.items]
+          const [removed] = items.splice(fromIndex, 1)
+          items.splice(toIndex, 0, removed)
+          const newItems = items.map((it, i) => ({ ...it, order: i + 1 }))
+          const newRoutines = current.routines.map((r) =>
+            r.id === routineId ? { ...r, items: newItems } : r
+          )
+          by[pid] = { ...current, routines: newRoutines }
+          set({ byProfile: by })
+        },
+
+        removeRoutineItem: (routineId, itemId) => {
+          const pid = get().currentProfileId
+          if (!pid) return
+          const by = { ...get().byProfile }
+          const current = by[pid] ?? defaultProfileData()
+          const routine = current.routines.find((r) => r.id === routineId)
+          const item = routine?.items.find((i) => i.id === itemId)
+          if (!routine || !item) return
+          const newItems = routine.items.filter((i) => i.id !== itemId).map((it, i) => ({ ...it, order: i + 1 }))
+          get().addDeletedItemTemplate(pid, routineId, item)
+          const newRoutines = current.routines.map((r) =>
+            r.id === routineId ? { ...r, items: newItems } : r
+          )
+          by[pid] = { ...current, routines: newRoutines }
+          set({ byProfile: by })
+        },
+
+        addRoutineItem: (routineId, item) => {
+          const pid = get().currentProfileId
+          if (!pid) return
+          const by = { ...get().byProfile }
+          const current = by[pid] ?? defaultProfileData()
+          const routine = current.routines.find((r) => r.id === routineId)
+          if (!routine) return
+          const nextOrder = routine.items.length + 1
+          const newItem: RoutineItem = {
+            ...patchItemImage(item),
+            id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+            order: nextOrder,
+          }
+          const newItems = [...routine.items, newItem]
+          const newRoutines = current.routines.map((r) =>
+            r.id === routineId ? { ...r, items: newItems } : r
+          )
+          by[pid] = { ...current, routines: newRoutines }
+          set({ byProfile: by })
+          if (item.label) get().removeDeletedItemTemplate(pid, routineId, item.label)
+        },
+
+        setItemHidden: (routineId, itemId, hidden) => {
+          const pid = get().currentProfileId
+          if (!pid) return
+          const by = { ...get().byProfile }
+          const current = by[pid] ?? defaultProfileData()
+          const routine = current.routines.find((r) => r.id === routineId)
+          if (!routine) return
+          const newItems = routine.items.map((i) =>
+            i.id === itemId ? { ...i, hidden } : i
+          )
+          const newRoutines = current.routines.map((r) =>
+            r.id === routineId ? { ...r, items: newItems } : r
+          )
+          by[pid] = { ...current, routines: newRoutines }
+          set({ byProfile: by })
+        },
+
+        setRoutineItemsOrder: (routineId, orderedItemIds) => {
+          const pid = get().currentProfileId
+          if (!pid) return
+          const by = { ...get().byProfile }
+          const current = by[pid] ?? defaultProfileData()
+          const routine = current.routines.find((r) => r.id === routineId)
+          if (!routine) return
+          const idToItem = new Map(routine.items.map((i) => [i.id, i]))
+          const newItems = orderedItemIds
+            .map((id, i) => idToItem.get(id))
+            .filter(Boolean) as RoutineItem[]
+          if (newItems.length !== routine.items.length) return
+          const withOrder = newItems.map((it, i) => ({ ...it, order: i + 1 }))
+          const newRoutines = current.routines.map((r) =>
+            r.id === routineId ? { ...r, items: withOrder } : r
+          )
+          by[pid] = { ...current, routines: newRoutines }
           set({ byProfile: by })
         },
 
@@ -537,6 +685,44 @@ export const useKidRoutineStore = create<KidRoutineState>()(
         },
 
         checkAndReset: () => set({ activeRoutineId: null, sessionCompletedItems: [], pendingConfirmItems: [] }),
+
+        /**
+         * 자정 리셋: 날짜가 바뀌었을 때(앱 로드·탭 포커스 시) 아침/저녁 루틴의 당일 완료 상태를 초기화합니다.
+         * 비개발자: 매일 밤 00:00이 지나 새 날이 되면, 아침·저녁 루틴은 다시 "안 한 상태"로 돌아갑니다.
+         * 첫 로드(lastResetDate 없음)에서는 로그를 비우지 않고 날짜만 기록합니다.
+         */
+        runDailyResetIfNeeded: () => {
+          const now = today()
+          const by = { ...get().byProfile }
+          let changed = false
+          for (const profileId of Object.keys(by)) {
+            const p = by[profileId] ?? defaultProfileData()
+            if (p.lastResetDate === now) continue
+            const prevDate = p.lastResetDate ?? null
+            const isNewDay = prevDate != null && prevDate !== now
+            const routineIdsMorningEvening = new Set(
+              p.routines
+                .filter((r) => r.type === 'morning' || r.type === 'afternoon' || r.type === 'evening')
+                .map((r) => r.id)
+            )
+            // 데일리 트래킹: 과거 날짜 로그는 절대 수정하지 않음. 새 날짜가 되면 오늘 날짜 로그만 초기화하여 다음날 루틴을 새로 진행할 수 있게 함.
+            const newLogs =
+              isNewDay
+                ? p.logs.map((log) => {
+                    if (log.date !== now || !routineIdsMorningEvening.has(log.routineId)) return log
+                    return {
+                      ...log,
+                      completedItems: [],
+                      isFullyCompleted: false,
+                      pointsEarned: 0,
+                    }
+                  })
+                : p.logs
+            by[profileId] = { ...p, lastResetDate: now, logs: newLogs }
+            changed = true
+          }
+          if (changed) set({ byProfile: by })
+        },
       }
     },
     {
@@ -652,13 +838,17 @@ export function useKidRoutineForProfile(profileId: string | undefined): UseKidRo
 
   const completedItemIds: CompletedItemIdsByTab = {
     morning: getLog('default-kid-morning')?.completedItems ?? [],
+    afternoon: getLog('default-kid-afternoon')?.completedItems ?? [],
     evening: getLog('default-kid-evening')?.completedItems ?? [],
-    weekend: getLog('weekend')?.completedItems ?? [],
+    special: getLog('default-kid-special')?.completedItems ?? [],
+    weekend: getLog('default-kid-weekend')?.completedItems ?? [],
   }
   const fullyCompletedToday: Record<RoutineTabType, boolean> = {
     morning: getLog('default-kid-morning')?.isFullyCompleted ?? false,
+    afternoon: getLog('default-kid-afternoon')?.isFullyCompleted ?? false,
     evening: getLog('default-kid-evening')?.isFullyCompleted ?? false,
-    weekend: getLog('weekend')?.isFullyCompleted ?? false,
+    special: getLog('default-kid-special')?.isFullyCompleted ?? false,
+    weekend: getLog('default-kid-weekend')?.isFullyCompleted ?? false,
   }
   const points: KidPoints = {
     totalPoints: rewardPoints.totalPoints,

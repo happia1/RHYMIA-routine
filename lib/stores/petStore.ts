@@ -41,7 +41,11 @@ interface PetState {
 
   selectPet: (profileId: string, species: PetSpecies) => void
   addFood: (profileId: string, count?: number) => void
+  /** 미션 완료(하트 수신) 시 EXP 직접 증가 — 하트 받을 때마다 EXP +1, 30 EXP당 레벨 1 */
+  addExp: (profileId: string, count?: number) => void
   feedPet: (profileId: string) => void
+  /** 한 개의 먹이만 캐릭터에게 주기 (보상바 클릭 시 하나씩 먹이기·EXP 1씩 증가용) */
+  feedPetOne: (profileId: string) => void
   getEmoji: (profileId: string) => string
   getProgress: (profileId: string) => number
   getNextStageExp: (profileId: string) => number
@@ -78,6 +82,31 @@ export const usePetStore = create<PetState>()(
               [profileId]: {
                 ...current,
                 pendingFood: current.pendingFood + count,
+              },
+            },
+          }
+        })
+      },
+
+      /** 하트(미션 보상) 수신 시 EXP 직접 증가. 30 EXP당 레벨 1 상승 반영 */
+      addExp: (profileId, count = 1) => {
+        set((s) => {
+          const current = s.byProfile[profileId] ?? defaultProfileState()
+          const newTotal = current.totalFed + count
+          let newStage = current.stage
+          for (let i = EXP_PER_STAGE.length - 1; i >= 0; i--) {
+            if (newTotal >= EXP_PER_STAGE[i]) {
+              newStage = i as GrowthStage
+              break
+            }
+          }
+          return {
+            byProfile: {
+              ...s.byProfile,
+              [profileId]: {
+                ...current,
+                totalFed: newTotal,
+                stage: newStage,
               },
             },
           }
@@ -125,10 +154,55 @@ export const usePetStore = create<PetState>()(
         }, 1800)
       },
 
+      /** 한 개의 먹이만 소비하고 EXP 1 올리기 (보상바에서 한 번 클릭 시 한 개씩 캐릭터에게 전달) */
+      feedPetOne: (profileId) => {
+        const s = get()
+        const current = s.byProfile[profileId] ?? defaultProfileState()
+        const { pendingFood, totalFed, stage, isEating } = current
+        if (pendingFood <= 0 || isEating) return
+
+        set((state) => ({
+          byProfile: {
+            ...state.byProfile,
+            [profileId]: {
+              ...(state.byProfile[profileId] ?? defaultProfileState()),
+              pendingFood: current.pendingFood - 1,
+              isEating: true,
+            },
+          },
+        }))
+
+        const newTotal = totalFed + 1
+        let newStage = stage
+        for (let i = EXP_PER_STAGE.length - 1; i >= 0; i--) {
+          if (newTotal >= EXP_PER_STAGE[i]) {
+            newStage = i as GrowthStage
+            break
+          }
+        }
+
+        setTimeout(() => {
+          set((state) => ({
+            byProfile: {
+              ...state.byProfile,
+              [profileId]: {
+                ...(state.byProfile[profileId] ?? defaultProfileState()),
+                totalFed: newTotal,
+                stage: newStage,
+                isEating: false,
+              },
+            },
+          }))
+        }, 600)
+      },
+
       getEmoji: (profileId) => {
         const current = get().byProfile[profileId] ?? defaultProfileState()
         const { species, stage } = current
-        return species ? PET_META[species].stages[stage] : '🥚'
+        const meta = species != null ? PET_META[species as PetSpecies] : undefined
+        if (!meta) return '🥚'
+        const idx = Math.min(stage, meta.stages.length - 1)
+        return meta.stages[idx] ?? '🥚'
       },
 
       getProgress: (profileId) => {

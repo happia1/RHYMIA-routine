@@ -2,9 +2,10 @@
 
 /**
  * 나의 펫 페이지 — 캐릭터 선택·상태·먹이·마일스톤 뱃지
- * 비개발자: 미션(루틴) 완료 시 먹이가 쌓이고, 먹이 주기로 펫이 성장해요. 마일스톤 달성 뱃지로 부모님께 선물을 받아요.
+ * 비개발자: 미션(루틴) 완료 시 먹이가 쌓이고, 먹이 주기로 펫이 성장해요. 단계별 이미지로 성장 모습이 표시돼요.
  */
 
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { ArrowLeft, Gift, Award } from 'lucide-react'
@@ -17,13 +18,7 @@ import type { PetSpecies } from '@/types/pet'
 
 const EMPTY_MILESTONES: Milestone[] = []
 
-const SPECIES_LIST: PetSpecies[] = [
-  'penguin',
-  'bluebird',
-  'dog',
-  'cat',
-  'plant',
-]
+const SPECIES_LIST: PetSpecies[] = ['dog', 'rabbit', 'duck']
 
 /** 마일스톤 달성 뱃지 기준 개수 및 보상 설명 */
 const MILESTONE_BADGES: { count: number; reward: string }[] = [
@@ -71,6 +66,14 @@ export default function KidPetPage() {
   const meta = species ? PET_META[species] : null
   const progress = getProgress(profileId)
   const nextExp = getNextStageExp(profileId)
+  const stageImageSrc =
+    species != null && meta
+      ? meta.stageImages[Math.min(stage, meta.stageImages.length - 1)]
+      : null
+  const [stageImageError, setStageImageError] = useState(false)
+  useEffect(() => {
+    setStageImageError(false)
+  }, [stageImageSrc])
 
   return (
     <div className="min-h-screen bg-[#FFF9F0] pb-24">
@@ -98,7 +101,11 @@ export default function KidPetPage() {
                   onClick={() => profileId && selectPet(profileId, s)}
                   className="flex flex-col items-center gap-2 p-4 rounded-2xl border-2 border-gray-100 hover:border-[#A8E6CF]"
                 >
-                  <span className="text-4xl">{PET_META[s].emoji}</span>
+                  <img
+                    src={PET_META[s].stageImages[0]}
+                    alt=""
+                    className="w-14 h-14 object-contain"
+                  />
                   <span className="text-xs font-bold text-gray-600">
                     {PET_META[s].label}
                   </span>
@@ -112,14 +119,23 @@ export default function KidPetPage() {
               layout
               className="bg-white rounded-2xl p-6 shadow-sm flex flex-col items-center"
             >
-              <motion.span
+              <motion.div
                 key={stage}
                 initial={{ scale: 0.8 }}
                 animate={{ scale: 1 }}
-                className="text-7xl mb-2"
+                className="w-28 h-28 flex items-center justify-center mb-2"
               >
-                {getEmoji(profileId)}
-              </motion.span>
+                {stageImageSrc && !stageImageError ? (
+                  <img
+                    src={stageImageSrc}
+                    alt={meta?.label ?? ''}
+                    className="w-full h-full object-contain"
+                    onError={() => setStageImageError(true)}
+                  />
+                ) : (
+                  <span className="text-7xl">{getEmoji(profileId)}</span>
+                )}
+              </motion.div>
               <p className="font-black text-gray-700">{meta?.label}</p>
               <p className="text-xs text-gray-400 mt-1">
                 레벨 {stage + 1} · 먹이 {totalFed}개

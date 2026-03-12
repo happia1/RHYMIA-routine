@@ -70,3 +70,24 @@ export function isEveningTime(): boolean {
   const hour = new Date().getHours()
   return hour >= EVENING_START_HOUR && hour < EVENING_END_HOUR
 }
+
+/** 저녁 루틴 자동 노출 구간: 18:00 ~ 24:00 (요청 사양) */
+const EVENING_SLOT_START_HOUR = 18
+const EVENING_SLOT_END_HOUR = 24
+
+/**
+ * 현재 시간 기준으로 어떤 루틴 섹션을 노출할지 반환
+ * - 05:00~12:00: 아침 루틴만 활성화
+ * - 18:00~24:00: 저녁 루틴만 활성화
+ * - 그 외(12~18): 두 섹션 모두 노출 (컴팩트)
+ */
+export function getActiveRoutineSlots(): { showMorning: boolean; showEvening: boolean } {
+  const hour = new Date().getHours()
+  const showMorning = hour >= MORNING_START_HOUR && hour < MORNING_END_HOUR
+  const showEvening = hour >= EVENING_SLOT_START_HOUR && hour < EVENING_SLOT_END_HOUR
+  const inGap = !showMorning && !showEvening
+  return {
+    showMorning: showMorning || inGap,
+    showEvening: showEvening || inGap,
+  }
+}
